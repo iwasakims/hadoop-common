@@ -1,0 +1,146 @@
+~~ Licensed to the Apache Software Foundation (ASF) under one or more
+~~ contributor license agreements.  See the NOTICE file distributed with
+~~ this work for additional information regarding copyright ownership.
+~~ The ASF licenses this file to You under the Apache License, Version 2.0
+~~ (the "License"); you may not use this file except in compliance with
+~~ the License.  You may obtain a copy of the License at
+~~
+~~     http://www.apache.org/licenses/LICENSE-2.0
+~~
+~~ Unless required by applicable law or agreed to in writing, software
+~~ distributed under the License is distributed on an "AS IS" BASIS,
+~~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+~~ See the License for the specific language governing permissions and
+~~ limitations under the License.
+
+  ---
+  Metrics Guide
+  ---
+  ---
+  ${maven.build.timestamp}
+
+%{toc}
+
+Overview
+
+  Metrics are statistical information exposed by Hadoop daemons,
+  used for monitoring, performance tuning and debug.
+  There are many metrics available by default
+  and they are very useful for troubleshooting. 
+  This page shows the details of available metrics.
+  
+  Each subsection describes each context into which metrics are grouped.
+
+
+JVM Metrics
+
+* jvm context
+
+  Each metrics record contains tags such as Context, ProcessName, SessionID
+  and Hostname as additional information along with metrics.
+
+*-------------------------------------+--------------------------------------+
+|| Name                               || Description
+*-------------------------------------+--------------------------------------+
+|<<<MemNonHeapUsedM>>> | Current non-heap memory used in MB
+*-------------------------------------+--------------------------------------+
+|<<<MemNonHeapCommittedM>>> | Current non-heap memory committed in MB
+*-------------------------------------+--------------------------------------+
+|<<<MemNonHeapMaxM>>> | Max non-heap memory size in MB
+*-------------------------------------+--------------------------------------+
+|<<<MemHeapUsedM>>> | Current heap memory used in MB
+*-------------------------------------+--------------------------------------+
+|<<<MemHeapCommittedM>>> | Current heap memory committed in MB
+*-------------------------------------+--------------------------------------+
+|<<<MemHeapMaxM>>> | Max heap memory size in MB
+*-------------------------------------+--------------------------------------+
+|<<<MemMaxM>>> | Max memory size in MB
+*-------------------------------------+--------------------------------------+
+|<<<ThreadsNew>>> | Current number of NEW threads
+*-------------------------------------+--------------------------------------+
+|<<<ThreadsRunnable>>> | Current number of RUNNABLE threads
+*-------------------------------------+--------------------------------------+
+|<<<ThreadsBlocked>>> | Current number of BLOCKED threads
+*-------------------------------------+--------------------------------------+
+|<<<ThreadsWaiting>>> | Current number of WAITING threads
+*-------------------------------------+--------------------------------------+
+|<<<ThreadsTimedWaiting>>> | Current number of TIMED_WAITING threads
+*-------------------------------------+--------------------------------------+
+|<<<ThreadsTerminated>>> | Current number of TERMINATED threads
+*-------------------------------------+--------------------------------------+
+|<<<GcInfo>>>  | Total GC count and GC time in msec, grouped by the kind of GC. \
+               | ex.) GcCountPS Scavenge=6, GCTimeMillisPS Scavenge=40, GCCountPS MarkSweep=0, GCTimeMillisPS MarkSweep=0
+*-------------------------------------+--------------------------------------+
+|<<<GcCount>>> | Total GC count
+*-------------------------------------+--------------------------------------+
+|<<<GcTimeMillis>>> | Total GC time in msec
+*-------------------------------------+--------------------------------------+
+|<<<LogFatal>>> | Total number of FATAL logs
+*-------------------------------------+--------------------------------------+
+|<<<LogError>>> | Total number of ERROR logs
+*-------------------------------------+--------------------------------------+
+|<<<LogWarn>>> | Total number of WARN logs
+*-------------------------------------+--------------------------------------+
+|<<<LogInfo>>> | Total number of INFO logs
+*-------------------------------------+--------------------------------------+
+
+
+RPC Metrics
+
+* rpc context
+
+  Each metrics record contains tags such as Context Hostname
+  and port (number to which server is bound)
+  as additional information along with metrics.
+
+*-------------------------------------+--------------------------------------+
+|| Name                               || Description
+*-------------------------------------+--------------------------------------+
+|<<<ReceivedBytes>>> | Total number of received bytes
+*-------------------------------------+--------------------------------------+
+|<<<SentBytes>>> | Total number of sent bytes
+*-------------------------------------+--------------------------------------+
+|<<<RpcQueueTimeNumOps>>> | Total number of RPC calls
+*-------------------------------------+--------------------------------------+
+|<<<RpcQueueTimeAvgTime>>> | Average queue time in milliseconds
+*-------------------------------------+--------------------------------------+
+|<<<RpcProcessingTimeNumOps>>> | Total number of RPC calls (same to RpcQueueTimeNumOps)
+*-------------------------------------+--------------------------------------+
+|<<<RpcProcessingAvgTime>>> | Average Processing time in milliseconds
+*-------------------------------------+--------------------------------------+
+|<<<RpcAuthenticationFailures>>> | Total number of authentication failures
+*-------------------------------------+--------------------------------------+
+|<<<RpcAuthenticationSuccesses>>> | Total number of authentication successes
+*-------------------------------------+--------------------------------------+
+|<<<RpcAuthorizationFailures>>> | Total number of authorization failures
+*-------------------------------------+--------------------------------------+
+|<<<RpcAuthorizationSuccesses>>> | Total number of authorization successes
+*-------------------------------------+--------------------------------------+
+|<<<NumOpenConnections>>> | Current number of open connections
+*-------------------------------------+--------------------------------------+
+|<<<CallQueueLength>>> | Current length of the call queue
+*-------------------------------------+--------------------------------------+
+
+* rpcdetailed context
+
+  Metrics of rpcdetailed context are exposed in unified manner by RPC
+  layer.  Two metrics are exporsed for each RPC based on its name.
+  Metrics named "(RPC method name)NumOps" indicates total number of
+  method calls, and metrics named "(RPC method name)AvgTime" show
+  average time of turn around for method calls in milliseconds.
+
+  Each metrics record contains tags such as Context Hostname
+  and port (number to which server is bound)
+  as additional information along with metrics.
+
+  The Metrics about RPCs which is not called are not included
+  in metrics record.
+
+
+*-------------------------------------+--------------------------------------+
+|| Name                               || Description
+*-------------------------------------+--------------------------------------+
+|<methodname><<<NumOps>>> | Total number of the times the method is called
+*-------------------------------------+--------------------------------------+
+|<methodname><<<AvgTime>>> | Time average of turn around time of  the method
+*-------------------------------------+--------------------------------------+
