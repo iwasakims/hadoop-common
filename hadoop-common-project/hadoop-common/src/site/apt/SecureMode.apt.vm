@@ -16,7 +16,6 @@
   ---
   ${maven.build.timestamp}
 
-
 %{toc|section=0|fromDepth=0|toDepth=3}
 
 Hadoop in Secure Mode
@@ -73,8 +72,7 @@ Hadoop in Secure Mode
   Kerberos principals are required.
   Each service reads auhenticate information saved in keytab file with appropriate permission.
 
-  Credential for serving HTTP web-consoles should be independent from 
-  credential for serving RPC.
+  HTTP web-consoles should be served by principal different from RPC's one.
 
   Subsections below shows the examples of credentials for Hadoop services.
   
@@ -181,6 +179,8 @@ KVNO Timestamp         Principal
 
   By default, it picks the first component of principal name as a user name
   if the realms is matched to the <<<defalut_realm>>> (usually defined in /etc/krb5.conf).
+  For example, <<<host/full.qualified.domain.name@REALM.TLD>>> is mapped to <<<host>>>
+  by default rule.
 
 ** Mapping from user to group
 
@@ -285,8 +285,8 @@ KVNO Timestamp         Principal
 || Parameter              || Value                  || Notes                 |
 *-------------------------+-------------------------+------------------------+
 | <<<hadoop.security.authentication>>> | <kerberos> | |
-| | | Enable authentication by Kerberos. \
-| | | <<<simple>>> is the default which means no authentication. |
+| | | <<<simple>>> : No authentication. (default) \
+| | | <<<kerberos>>> : Enable authentication by Kerberos. |
 *-------------------------+-------------------------+------------------------+
 | <<<hadoop.security.authorization>>> | <true> | |
 | | | Enable {{{./ServiceLevelAuth.html}RPC service-level authorization}}. |
@@ -295,6 +295,24 @@ KVNO Timestamp         Principal
 | | | <authentication> : authentication only (default) \
 | | | <integrity> : integrity check in addition to authentication \
 | | | <privacy> : data encryption in addition to integrity |
+*-------------------------+-------------------------+------------------------+
+| <<<hadoop.security.auth_to_local>>> | | |
+| |  <<<RULE:>>><exp1>\
+| |  <<<RULE:>>><exp2>\
+| |  <...>\
+| |  DEFAULT | 
+| | | The value is string containing new line characters.
+| | | See
+| | | {{{http://web.mit.edu/Kerberos/krb5-latest/doc/admin/conf_files/krb5_conf.html}Kerberos documentation}}
+| | | for format for <exp>.
+*-------------------------+-------------------------+------------------------+
+| <<<hadoop.proxyuser.>>><superuser><<<.hosts>>> | | |
+| | | comma separated hosts from which <superuser> access are allowd to impersonation. |
+| | | <<<*>>> means wildcard. |
+*-------------------------+-------------------------+------------------------+
+| <<<hadoop.proxyuser.>>><superuser><<<.groups>>> | | |
+| | | comma separated groups to which users impersonated by <superuser> belongs. |
+| | | <<<*>>> means wildcard. |
 *-------------------------+-------------------------+------------------------+
 Configuration for <<<conf/core-site.xml>>>
 
@@ -307,6 +325,10 @@ Configuration for <<<conf/core-site.xml>>>
 | | | Enable HDFS block access tokens for secure operations. |
 *-------------------------+-------------------------+------------------------+
 | <<<dfs.https.enable>>> | <true> | |
+| | | This value is deprecated. Use dfs.http.policy |
+*-------------------------+-------------------------+------------------------+
+| <<<dfs.http.policy>>> | <HTTP_ONLY> or <HTTPS_ONLY> or <HTTP_AND_HTTPS> | |
+| | | HTTPS_ONLY turns off http access |
 *-------------------------+-------------------------+------------------------+
 | <<<dfs.namenode.https-address>>> | <nn_host_fqdn:50470> | |
 *-------------------------+-------------------------+------------------------+
