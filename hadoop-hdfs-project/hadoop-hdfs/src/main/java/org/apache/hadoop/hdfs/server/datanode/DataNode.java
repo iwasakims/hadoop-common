@@ -84,6 +84,9 @@ import org.apache.hadoop.security.authorize.AccessControlList;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.security.token.TokenIdentifier;
 import org.apache.hadoop.util.*;
+import org.apache.hadoop.tracing.SpanReceiverHost;
+import org.apache.hadoop.util.Daemon;
+import org.apache.hadoop.util.DiskChecker;
 import org.apache.hadoop.util.DiskChecker.DiskErrorException;
 import org.apache.hadoop.util.DiskChecker.DiskOutOfSpaceException;
 import org.mortbay.util.ajax.JSON;
@@ -1745,6 +1748,7 @@ public class DataNode extends Configured
     ArrayList<File> dirs =
         getDataDirsFromURIs(dataDirs, localFS, dataNodeDiskChecker);
     DefaultMetricsSystem.initialize("DataNode");
+    SpanReceiverHost.init(conf);
 
     assert dirs.size() > 0 : "number of data directories should be > 0";
     return new DataNode(conf, dirs, resources);

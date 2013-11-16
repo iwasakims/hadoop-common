@@ -161,6 +161,7 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.security.token.TokenRenewer;
+import org.apache.hadoop.tracing.SpanReceiverHost;
 import org.apache.hadoop.util.DataChecksum;
 import org.apache.hadoop.util.DataChecksum.Type;
 import org.apache.hadoop.util.Progressable;
@@ -521,7 +522,7 @@ public class DFSClient implements java.io.Closeable {
     this.authority = nameNodeUri == null? "null": nameNodeUri.getAuthority();
     this.clientName = "DFSClient_" + dfsClientConf.taskId + "_" + 
         DFSUtil.getRandom().nextInt()  + "_" + Thread.currentThread().getId();
-    
+
     int numResponseToDrop = conf.getInt(
         DFSConfigKeys.DFS_CLIENT_TEST_DROP_NAMENODE_RESPONSE_NUM_KEY,
         DFSConfigKeys.DFS_CLIENT_TEST_DROP_NAMENODE_RESPONSE_NUM_DEFAULT);
@@ -534,7 +535,10 @@ public class DFSClient implements java.io.Closeable {
       proxyInfo = NameNodeProxies.createProxyWithLossyRetryHandler(conf,
           nameNodeUri, ClientProtocol.class, numResponseToDrop);
     }
-    
+
+    // Initialize tracing, if configured.
+    SpanReceiverHost.init(conf);
+
     if (proxyInfo != null) {
       this.dtService = proxyInfo.getDelegationTokenService();
       this.namenode = proxyInfo.getProxy();
@@ -2506,7 +2510,7 @@ public class DFSClient implements java.io.Closeable {
   /**
    * Get {@link ContentSummary} rooted at the specified directory.
    * @param path The string representation of the path
-   * 
+   *
    * @see ClientProtocol#getContentSummary(String)
    */
   ContentSummary getContentSummary(String src) throws IOException {

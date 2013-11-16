@@ -36,6 +36,8 @@ import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.hdfs.server.protocol.NamespaceInfo;
 import org.apache.hadoop.hdfs.server.protocol.RemoteEditLog;
 import org.apache.hadoop.hdfs.server.protocol.RemoteEditLogManifest;
+import org.cloudera.htrace.Trace;
+import org.cloudera.htrace.TraceScope;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ComparisonChain;
@@ -476,7 +478,24 @@ public class JournalSet implements JournalManager {
         @Override
         public void apply(JournalAndStream jas) throws IOException {
           if (jas.isActive()) {
-            jas.getCurrentStream().flushAndSync(durable);
+            TraceScope scope = null;
+
+            if (Trace.isTracing()) {
+              scope = Trace.startSpan("JournalSet.flushAndSync");
+              scope.getSpan().addKVAnnotation(
+                  "manager".getBytes(),
+                  jas.getManager().toString().getBytes());
+
+              scope.getSpan().addKVAnnotation(
+                  "stream".getBytes(),
+                  jas.getCurrentStream().toString().getBytes());
+            }
+
+            try {
+              jas.getCurrentStream().flushAndSync(durable);
+            } finally {
+              if (scope != null) scope.close();
+            }
           }
         }
       }, "flushAndSync");
@@ -488,7 +507,24 @@ public class JournalSet implements JournalManager {
         @Override
         public void apply(JournalAndStream jas) throws IOException {
           if (jas.isActive()) {
-            jas.getCurrentStream().flush();
+            TraceScope scope = null;
+
+            if (Trace.isTracing()) {
+              scope = Trace.startSpan("JournalSet.flushAndSync");
+              scope.getSpan().addKVAnnotation(
+                  "manager".getBytes(),
+                  jas.getManager().toString().getBytes());
+
+              scope.getSpan().addKVAnnotation(
+                  "stream".getBytes(),
+                  jas.getCurrentStream().toString().getBytes());
+            }
+
+            try {
+              jas.getCurrentStream().flush();
+            } finally {
+              if (scope != null) scope.close();
+            }
           }
         }
       }, "flush");

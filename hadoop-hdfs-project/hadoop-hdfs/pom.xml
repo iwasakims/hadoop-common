@@ -181,6 +181,10 @@ http://maven.apache.org/xsd/maven-4.0.0.xsd">
       <artifactId>netty</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.cloudera.htrace</groupId>
+      <artifactId>htrace-core</artifactId>
+    </dependency>
   </dependencies>
 
   <build>

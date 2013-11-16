@@ -42,6 +42,7 @@ import org.apache.hadoop.net.unix.DomainSocket;
 import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 import org.apache.hadoop.security.token.Token;
+import org.cloudera.htrace.Span;
 
 
 /** 
@@ -87,7 +88,8 @@ public class BlockReaderFactory {
                                      PeerCache peerCache,
                                      FileInputStreamCache fisCache,
                                      boolean allowShortCircuitLocalReads,
-                                     CachingStrategy cachingStrategy)
+                                     CachingStrategy cachingStrategy,
+                                     Span parentSpan)
   throws IOException {
     peer.setReadTimeout(conf.socketTimeout);
     peer.setWriteTimeout(HdfsServerConstants.WRITE_TIMEOUT);
@@ -98,7 +100,7 @@ public class BlockReaderFactory {
         // enabled, try to set up a BlockReaderLocal.
         BlockReader reader = newShortCircuitBlockReader(conf, file,
             block, blockToken, startOffset, len, peer, datanodeID,
-            domSockFactory, verifyChecksum, fisCache);
+            domSockFactory, verifyChecksum, fisCache, parentSpan);
         if (reader != null) {
           // One we've constructed the short-circuit block reader, we don't
           // need the socket any more.  So let's return it to the cache.
@@ -131,7 +133,7 @@ public class BlockReaderFactory {
       return RemoteBlockReader2.newBlockReader(
           file, block, blockToken, startOffset, len,
           verifyChecksum, clientName, peer, datanodeID, peerCache,
-          cachingStrategy);
+          cachingStrategy, parentSpan);
     }
   }
 
@@ -172,11 +174,11 @@ public class BlockReaderFactory {
       Token<BlockTokenIdentifier> blockToken, long startOffset,
       long len, Peer peer, DatanodeID datanodeID,
       DomainSocketFactory domSockFactory, boolean verifyChecksum,
-      FileInputStreamCache fisCache) throws IOException {
+      FileInputStreamCache fisCache, Span parentSpan) throws IOException {
     final DataOutputStream out =
         new DataOutputStream(new BufferedOutputStream(
           peer.getOutputStream()));
-    new Sender(out).requestShortCircuitFds(block, blockToken, 1);
+    new Sender(out, parentSpan).requestShortCircuitFds(block, blockToken, 1);
     DataInputStream in =
         new DataInputStream(peer.getInputStream());
     BlockOpResponseProto resp = BlockOpResponseProto.parseFrom(

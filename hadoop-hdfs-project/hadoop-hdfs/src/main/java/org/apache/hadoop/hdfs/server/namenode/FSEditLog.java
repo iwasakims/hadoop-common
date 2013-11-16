@@ -86,6 +86,8 @@ import org.apache.hadoop.hdfs.server.protocol.RemoteEditLogManifest;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.security.token.delegation.DelegationKey;
+import org.cloudera.htrace.Trace;
+import org.cloudera.htrace.TraceScope;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -613,6 +615,11 @@ public class FSEditLog implements LogsPurgeable {
       
       // do the sync
       long start = now();
+      TraceScope traceScope = null;
+
+      if (Trace.isTracing()) {
+        traceScope = Trace.startSpan("FSEditLog sync");
+      }
       try {
         if (logStream != null) {
           logStream.flush();
@@ -622,10 +629,15 @@ public class FSEditLog implements LogsPurgeable {
           final String msg =
               "Could not sync enough journals to persistent storage. "
               + "Unsynced transactions: " + (txid - synctxid);
+          if (traceScope != null) {
+            traceScope.getSpan().addTimelineAnnotation(msg);
+          }
           LOG.fatal(msg, new Exception());
           IOUtils.cleanup(LOG, journalSet);
           terminate(1, msg);
         }
+      } finally {
+        if (traceScope != null) traceScope.close();
       }
       long elapsed = now() - start;
   

@@ -150,7 +150,7 @@ public class TestBlockTokenWithDFS {
           new DFSClient.Conf(conf), file, block, lblock.getBlockToken(), 0, -1,
           true, "TestBlockTokenWithDFS", TcpPeerServer.peerFromSocket(s),
           nodes[0], null, null, null, false,
-          CachingStrategy.newDefaultStrategy());
+          CachingStrategy.newDefaultStrategy(), null);
 
     } catch (IOException ex) {
       if (ex instanceof InvalidBlockTokenException) {

@@ -156,7 +156,7 @@ public class BlockReaderTestUtil {
       testBlock.getBlockToken(), 
       offset, lenToRead,
       true, "BlockReaderTestUtil", TcpPeerServer.peerFromSocket(sock),
-      nodes[0], null, null, null, false, CachingStrategy.newDefaultStrategy());
+      nodes[0], null, null, null, false, CachingStrategy.newDefaultStrategy(), null);
   }
 
   /**

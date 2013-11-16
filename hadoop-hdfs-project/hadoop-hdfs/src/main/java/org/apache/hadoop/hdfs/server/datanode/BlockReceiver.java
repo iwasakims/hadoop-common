@@ -51,9 +51,14 @@ import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.nativeio.NativeIO;
 import org.apache.hadoop.util.Daemon;
 import org.apache.hadoop.util.DataChecksum;
+
 import org.apache.hadoop.util.StringUtils;
 
 import com.google.common.annotations.VisibleForTesting;
+
+import org.cloudera.htrace.Span;
+import org.cloudera.htrace.Trace;
+
 
 /** A class that receives a block and writes to its own disk, meanwhile
  * may copies it to another site. If a throttler is provided,
@@ -117,6 +122,8 @@ class BlockReceiver implements Closeable {
   private final boolean isTransfer;
 
   private boolean syncOnClose;
+  
+  private Span traceSpan;
 
   BlockReceiver(final ExtendedBlock block, final DataInputStream in,
       final String inAddr, final String myAddr,
@@ -152,6 +159,8 @@ class BlockReceiver implements Closeable {
             + "\n  cachingStrategy = " + cachingStrategy
             );
       }
+      
+      this.traceSpan = Trace.currentSpan();
 
       //
       // Open local disk out
@@ -257,6 +266,9 @@ class BlockReceiver implements Closeable {
    */
   @Override
   public void close() throws IOException {
+    if (traceSpan != null) {
+      traceSpan.addTimelineAnnotation("J");
+    }
     if (packetReceiver != null) {
       packetReceiver.close();
     }
@@ -313,6 +325,9 @@ class BlockReceiver implements Closeable {
     }
     if (measuredFlushTime) {
       datanode.metrics.addFlushNanos(flushTotalNanos);
+    }
+    if (traceSpan != null) {
+      traceSpan.addTimelineAnnotation("closed");
     }
     // disk check
     if(ioe != null) {
@@ -943,6 +958,7 @@ class BlockReceiver implements Closeable {
      */
     @Override
     public void run() {
+      Trace.continueSpan(traceSpan);
       boolean lastPacketInBlock = false;
       final long startTime = ClientTraceLog.isInfoEnabled() ? System.nanoTime() : 0;
       while (isRunning() && !lastPacketInBlock) {

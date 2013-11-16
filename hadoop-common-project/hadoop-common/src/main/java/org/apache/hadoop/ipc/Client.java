@@ -88,11 +88,13 @@ import org.apache.hadoop.util.ProtoUtil;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
+import org.cloudera.htrace.Trace;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.protobuf.CodedOutputStream;
+import com.google.protobuf.TextFormat;
 
 /** A client for an IPC service.  IPC calls take a single {@link Writable} as a
  * parameter, and return a {@link Writable} as their value.  A service runs on
@@ -684,10 +686,13 @@ public class Client {
     private synchronized void setupIOstreams() {
       if (socket != null || shouldCloseConnection.get()) {
         return;
-      } 
+      }
       try {
         if (LOG.isDebugEnabled()) {
           LOG.debug("Connecting to "+server);
+        }
+        if (Trace.isTracing()) {
+          Trace.addTimelineAnnotation("IPC client was not connected. Connecting...");
         }
         short numRetries = 0;
         final short MAX_RETRIES = 5;
@@ -752,6 +757,10 @@ public class Client {
 
           // update last activity time
           touch();
+          
+          if (Trace.isTracing()) {
+            Trace.addTimelineAnnotation("IPC client connected");
+          }
 
           // start the receiver thread after the socket connection has been set
           // up
@@ -983,6 +992,7 @@ public class Client {
       //
       // Items '1' and '2' are prepared here. 
       final DataOutputBuffer d = new DataOutputBuffer();
+
       RpcRequestHeaderProto header = ProtoUtil.makeRpcRequestHeader(
           call.rpcKind, OperationProto.RPC_FINAL_PACKET, call.id, call.retry,
           clientId);

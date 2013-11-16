@@ -75,6 +75,7 @@ import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authorize.RefreshAuthorizationPolicyProtocol;
 import org.apache.hadoop.tools.GetUserMappingsProtocol;
+import org.apache.hadoop.tracing.SpanReceiverHost;
 import org.apache.hadoop.util.ExitUtil.ExitException;
 import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.JvmPauseMonitor;
@@ -487,6 +488,9 @@ public class NameNode implements NameNodeStatusMXBean {
       startHttpServer(conf);
       validateConfigurationSettingsOrAbort(conf);
     }
+
+    SpanReceiverHost.init(conf);
+
     loadNamesystem(conf);
 
     rpcServer = createRpcServer(conf);

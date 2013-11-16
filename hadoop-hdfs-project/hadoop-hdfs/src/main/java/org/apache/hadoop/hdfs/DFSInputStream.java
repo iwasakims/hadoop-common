@@ -67,11 +67,14 @@ import org.apache.hadoop.net.unix.DomainSocket;
 import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.IdentityHashStore;
+import org.cloudera.htrace.Span;
+import org.cloudera.htrace.Trace;
+import org.cloudera.htrace.TraceScope;
 
 import com.google.common.annotations.VisibleForTesting;
 
 /****************************************************************
- * DFSInputStream provides bytes from a named file.  It handles 
+ * DFSInputStream provides bytes from a named file.  It handles
  * negotiation of the namenode and various datanodes as necessary.
  ****************************************************************/
 @InterfaceAudience.Private
@@ -94,10 +97,11 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
   private long blockEnd = -1;
   private CachingStrategy cachingStrategy;
   private final ReadStatistics readStatistics = new ReadStatistics();
+  private final Span traceSpan;
 
   /**
    * Track the ByteBuffers that we have handed out to readers.
-   * 
+   *
    * The value type can be either ByteBufferPool or ClientMmap, depending on
    * whether we this is a memory-mapped buffer or not.
    */
@@ -142,7 +146,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
     public long getTotalShortCircuitBytesRead() {
       return totalShortCircuitBytesRead;
     }
-    
+
     /**
      * @return The total number of zero-copy bytes read.
      */
@@ -156,7 +160,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
     public long getRemoteBytesRead() {
       return totalBytesRead - totalLocalBytesRead;
     }
-    
+
     void addRemoteBytes(long amt) {
       this.totalBytesRead += amt;
     }
@@ -178,7 +182,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
       this.totalShortCircuitBytesRead += amt;
       this.totalZeroCopyBytesRead += amt;
     }
-    
+
     private long totalBytesRead;
 
     private long totalLocalBytesRead;
@@ -187,7 +191,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
 
     private long totalZeroCopyBytesRead;
   }
-  
+
   private final FileInputStreamCache fileInputStreamCache;
 
   /**
@@ -203,18 +207,18 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
    */
   private int failures = 0;
 
-  /* XXX Use of CocurrentHashMap is temp fix. Need to fix 
+  /* XXX Use of CocurrentHashMap is temp fix. Need to fix
    * parallel accesses to DFSInputStream (through ptreads) properly */
   private final ConcurrentHashMap<DatanodeInfo, DatanodeInfo> deadNodes =
              new ConcurrentHashMap<DatanodeInfo, DatanodeInfo>();
   private int buffersize = 1;
-  
+
   private final byte[] oneByteBuf = new byte[1]; // used for 'int read()'
 
   void addToDeadNodes(DatanodeInfo dnInfo) {
     deadNodes.put(dnInfo, dnInfo);
   }
-  
+
   DFSInputStream(DFSClient dfsClient, String src, int buffersize, boolean verifyChecksum
                  ) throws IOException, UnresolvedLinkException {
     this.dfsClient = dfsClient;
@@ -227,7 +231,10 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
         dfsClient.getConf().shortCircuitStreamsCacheExpiryMs);
     this.cachingStrategy =
         dfsClient.getDefaultReadCachingStrategy().duplicate();
+
+    TraceScope scope = Trace.startSpan("DFSInputStream");
     openInfo();
+    this.traceSpan = scope.detach();
   }
 
   /**
@@ -294,7 +301,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
         }
         final long len = readBlockLength(last);
         last.getBlock().setNumBytes(len);
-        lastBlockBeingWrittenLength = len; 
+        lastBlockBeingWrittenLength = len;
       }
     }
 
@@ -306,17 +313,17 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
   private long readBlockLength(LocatedBlock locatedblock) throws IOException {
     assert locatedblock != null : "LocatedBlock cannot be null";
     int replicaNotFoundCount = locatedblock.getLocations().length;
-    
+
     for(DatanodeInfo datanode : locatedblock.getLocations()) {
       ClientDatanodeProtocol cdp = null;
-      
+
       try {
         cdp = DFSUtil.createClientDatanodeProtocolProxy(datanode,
             dfsClient.getConfiguration(), dfsClient.getConf().socketTimeout,
             dfsClient.getConf().connectToDnViaHostname, locatedblock);
-        
+
         final long n = cdp.getReplicaVisibleLength(locatedblock.getBlock());
-        
+
         if (n >= 0) {
           return n;
         }
@@ -328,7 +335,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
           // special case : replica might not be on the DN, treat as 0 length
           replicaNotFoundCount--;
         }
-        
+
         if (DFSClient.LOG.isDebugEnabled()) {
           DFSClient.LOG.debug("Failed to getReplicaVisibleLength from datanode "
               + datanode + " for block " + locatedblock.getBlock(), ioe);
@@ -350,7 +357,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
 
     throw new IOException("Cannot obtain block length for " + locatedblock);
   }
-  
+
   public synchronized long getFileLength() {
     return locatedBlocks == null? 0:
         locatedBlocks.getFileLength() + lastBlockBeingWrittenLength;
@@ -370,7 +377,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
   }
 
   /**
-   * Returns the block containing the target position. 
+   * Returns the block containing the target position.
    */
   synchronized public ExtendedBlock getCurrentBlock() {
     if (currentLocatedBlock == null){
@@ -389,7 +396,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
   /**
    * Get block at the specified position.
    * Fetch it from the namenode if not cached.
-   * 
+   *
    * @param offset
    * @param updatePosition whether to update current position
    * @return located block
@@ -411,7 +418,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
     else if (offset >= locatedBlocks.getFileLength()) {
       // offset to the portion of the last block,
       // which is not known to the name-node yet;
-      // getting the last block 
+      // getting the last block
       blk = locatedBlocks.getLastLocatedBlock();
     }
     else {
@@ -459,8 +466,8 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
    * @return consequent segment of located blocks
    * @throws IOException
    */
-  private synchronized List<LocatedBlock> getBlockRange(long offset, 
-                                                        long length) 
+  private synchronized List<LocatedBlock> getBlockRange(long offset,
+                                                        long length)
                                                       throws IOException {
     // getFileLength(): returns total file length
     // locatedBlocks.getFileLength(): returns length of completed blocks
@@ -476,7 +483,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
 
     if (readOffsetWithinCompleteBlk) {
       //get the blocks of finalized (completed) block range
-      blocks = getFinalizedBlockRange(offset, 
+      blocks = getFinalizedBlockRange(offset,
         Math.min(length, lengthOfCompleteBlk - offset));
     } else {
       blocks = new ArrayList<LocatedBlock>(1);
@@ -547,7 +554,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
     DatanodeInfo chosenNode = null;
     int refetchToken = 1; // only need to get a new access token once
     int refetchEncryptionKey = 1; // only need to get a new encryption key once
-    
+
     boolean connectFailedOnce = false;
 
     while (true) {
@@ -579,14 +586,14 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
         continue;
       } catch (IOException ex) {
         if (ex instanceof InvalidEncryptionKeyException && refetchEncryptionKey > 0) {
-          DFSClient.LOG.info("Will fetch a new encryption key and retry, " 
+          DFSClient.LOG.info("Will fetch a new encryption key and retry, "
               + "encryption key was invalid when connecting to " + targetAddr
               + " : " + ex);
           // The encryption key used is invalid.
           refetchEncryptionKey--;
           dfsClient.clearDataEncryptionKey();
         } else if (ex instanceof InvalidBlockTokenException && refetchToken > 0) {
-          DFSClient.LOG.info("Will fetch a new access token and retry, " 
+          DFSClient.LOG.info("Will fetch a new access token and retry, "
               + "access token was invalid when connecting to " + targetAddr
               + " : " + ex);
           /*
@@ -620,29 +627,41 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
     if (closed) {
       return;
     }
-    dfsClient.checkOpen();
 
-    if (!extendedReadBuffers.isEmpty()) {
-      final StringBuilder builder = new StringBuilder();
-      extendedReadBuffers.visitAll(new IdentityHashStore.Visitor<ByteBuffer, Object>() {
-        private String prefix = "";
-        @Override
-        public void accept(ByteBuffer k, Object v) {
-          builder.append(prefix).append(k);
-          prefix = ", ";
-        }
-      });
-      DFSClient.LOG.warn("closing file " + src + ", but there are still " +
-          "unreleased ByteBuffers allocated by read().  " +
-          "Please release " + builder.toString() + ".");
+    TraceScope innerTraceScope = null;
+    if (this.traceSpan != null) {
+      innerTraceScope = Trace.continueSpan(traceSpan.child("DFSInputStream.close"));
     }
-    if (blockReader != null) {
-      blockReader.close();
-      blockReader = null;
+
+    try {
+      dfsClient.checkOpen();
+
+      if (!extendedReadBuffers.isEmpty()) {
+        final StringBuilder builder = new StringBuilder();
+        extendedReadBuffers.visitAll(new IdentityHashStore.Visitor<ByteBuffer, Object>() {
+          private String prefix = "";
+          @Override
+          public void accept(ByteBuffer k, Object v) {
+            builder.append(prefix).append(k);
+            prefix = ", ";
+          }
+        });
+        DFSClient.LOG.warn("closing file " + src + ", but there are still " +
+            "unreleased ByteBuffers allocated by read().  " +
+            "Please release " + builder.toString() + ".");
+      }
+      if (blockReader != null) {
+        blockReader.close();
+        blockReader = null;
+      }
+      super.close();
+      fileInputStreamCache.close();
+      closed = true;
+    } finally {
+      // Clean up tracing
+      if (innerTraceScope != null) innerTraceScope.close();
+      if (traceSpan != null) traceSpan.stop();
     }
-    super.close();
-    fileInputStreamCache.close();
-    closed = true;
   }
 
   @Override
@@ -838,15 +857,31 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
   @Override
   public synchronized int read(final byte buf[], int off, int len) throws IOException {
     ReaderStrategy byteArrayReader = new ByteArrayStrategy(buf);
-
-    return readWithStrategy(byteArrayReader, off, len);
+    TraceScope innerTraceScope = null;
+    if (traceSpan != null) {
+      innerTraceScope = Trace.continueSpan(traceSpan.child("DFSInputStream.read"));
+      innerTraceScope.getSpan().addTimelineAnnotation("Strategy = ByteArrayStrategy");
+    }
+    try {
+      return readWithStrategy(byteArrayReader, off, len);
+    } finally {
+      if (innerTraceScope != null) innerTraceScope.close();
+    }
   }
 
   @Override
   public synchronized int read(final ByteBuffer buf) throws IOException {
     ReaderStrategy byteBufferReader = new ByteBufferStrategy(buf);
-
-    return readWithStrategy(byteBufferReader, 0, buf.remaining());
+    TraceScope innerTraceScope = null;
+    if (traceSpan != null) {
+      innerTraceScope = Trace.continueSpan(traceSpan.child("DFSInputStream.read"));
+      innerTraceScope.getSpan().addTimelineAnnotation("Strategy = ByteBufferStrategy");
+    }
+    try {
+      return readWithStrategy(byteBufferReader, 0, buf.remaining());
+    } finally {
+      if (innerTraceScope != null) innerTraceScope.close();
+    }
   }
 
 
@@ -1091,7 +1126,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
             dfsClient.getConf(), file, block, blockToken, startOffset,
             len, verifyChecksum, clientName, peer, chosenNode, 
             dsFactory, peerCache, fileInputStreamCache,
-            allowShortCircuitLocalReads, cachingStrategy);
+            allowShortCircuitLocalReads, cachingStrategy, traceSpan);
         return reader;
       } catch (IOException ex) {
         DFSClient.LOG.debug("Error making BlockReader with DomainSocket. " +
@@ -1114,7 +1149,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
             dfsClient.getConf(), file, block, blockToken, startOffset,
             len, verifyChecksum, clientName, peer, chosenNode,
             dsFactory, peerCache, fileInputStreamCache,
-            allowShortCircuitLocalReads, cachingStrategy);
+            allowShortCircuitLocalReads, cachingStrategy, traceSpan);
         return reader;
       } catch (IOException e) {
         DFSClient.LOG.warn("failed to connect to " + domSock, e);
@@ -1138,7 +1173,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
             dfsClient.getConf(), file, block, blockToken, startOffset,
             len, verifyChecksum, clientName, peer, chosenNode, 
             dsFactory, peerCache, fileInputStreamCache, false,
-            cachingStrategy);
+            cachingStrategy, traceSpan);
         return reader;
       } catch (IOException ex) {
         DFSClient.LOG.debug("Error making BlockReader. Closing stale " +
@@ -1158,7 +1193,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
         dfsClient.getConf(), file, block, blockToken, startOffset,
         len, verifyChecksum, clientName, peer, chosenNode, 
         dsFactory, peerCache, fileInputStreamCache, false,
-        cachingStrategy);
+        cachingStrategy, traceSpan);
   }
 
 
@@ -1283,6 +1318,9 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
     }
     if (closed) {
       throw new IOException("Stream is closed!");
+    }
+    if (traceSpan != null) {
+      traceSpan.addTimelineAnnotation("Seeking to "+targetPos);
     }
     boolean done = false;
     if (pos <= targetPos && targetPos <= blockEnd) {

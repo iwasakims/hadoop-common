@@ -230,7 +230,7 @@ public class JspHelper {
         "JspHelper", TcpPeerServer.peerFromSocketAndKey(s, encryptionKey),
         new DatanodeID(addr.getAddress().getHostAddress(),
             addr.getHostName(), poolId, addr.getPort(), 0, 0, 0), null,
-            null, null, false, CachingStrategy.newDefaultStrategy());
+            null, null, false, CachingStrategy.newDefaultStrategy(), null);
         
     final byte[] buf = new byte[amtToRead];
     int readOffset = 0;

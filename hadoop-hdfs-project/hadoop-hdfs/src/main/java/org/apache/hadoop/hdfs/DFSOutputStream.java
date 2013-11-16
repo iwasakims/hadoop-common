@@ -84,7 +84,11 @@ import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.Daemon;
 import org.apache.hadoop.util.DataChecksum;
 import org.apache.hadoop.util.Progressable;
+import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
+import org.cloudera.htrace.Span;
+import org.cloudera.htrace.Trace;
+import org.cloudera.htrace.TraceScope;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.cache.CacheBuilder;
@@ -151,14 +155,16 @@ public class DFSOutputStream extends FSOutputSummer
   private final short blockReplication; // replication factor of file
   private boolean shouldSyncBlock = false; // force blocks to disk upon close
   private CachingStrategy cachingStrategy;
-  
-  private static class Packet {
-    private static final long HEART_BEAT_SEQNO = -1L;
-    long seqno; // sequencenumber of buffer in block
-    final long offsetInBlock; // offset in block
-    boolean syncBlock; // this packet forces the current block to disk
-    int numChunks; // number of chunks currently in packet
-    final int maxChunks; // max chunks in packet
+  private Span traceSpan = null;
+
+    private static class Packet {
+      private static final long HEART_BEAT_SEQNO = -1L;
+      long seqno; // sequencenumber of buffer in block
+      final long offsetInBlock; // offset in block
+      boolean syncBlock; // this packet forces the current block to disk
+      int numChunks; // number of chunks currently in packet
+      final int maxChunks; // max chunks in packet
+
     byte[]  buf;
     private boolean lastPacketInBlock; // is this the last packet in block?
 
@@ -1117,6 +1123,11 @@ public class DFSOutputStream extends FSOutputSummer
       while (true) {
         boolean result = false;
         DataOutputStream out = null;
+        Span span = null;
+        if (traceSpan != null) {
+          span =  traceSpan.child("DFSOutputStream.createBlockOutputStream");
+          span.addTimelineAnnotation("setup pipeline for " + block);
+        }
         try {
           assert null == s : "Previous socket unclosed";
           assert null == blockReplyStream : "Previous blockReplyStream unclosed";
@@ -1167,6 +1178,10 @@ public class DFSOutputStream extends FSOutputSummer
           result =  true; // success
   
         } catch (IOException ie) {
+          if (span != null) {
+            span.addTimelineAnnotation("Failed to setup pipeline: " +
+              StringUtils.stringifyException(ie));
+          }
           DFSClient.LOG.info("Exception in createBlockOutputStream", ie);
           if (ie instanceof InvalidEncryptionKeyException && refetchEncryptionKey > 0) {
             DFSClient.LOG.info("Will fetch a new encryption key and retry, " 
@@ -1192,11 +1207,17 @@ public class DFSOutputStream extends FSOutputSummer
           } else {
             errorIndex = 0;
           }
+          if (span != null) {
+            span.addTimelineAnnotation("Bad node was: " + nodes[errorIndex]);
+          }
           hasError = true;
           setLastException(ie);
           result =  false;  // error
         } finally {
           if (!result) {
+            if (span != null) {
+              span.addTimelineAnnotation("failed");
+            }
             IOUtils.closeSocket(s);
             s = null;
             IOUtils.closeStream(out);
@@ -1204,6 +1225,8 @@ public class DFSOutputStream extends FSOutputSummer
             IOUtils.closeStream(blockReplyStream);
             blockReplyStream = null;
           }
+
+          if (span != null) span.stop();
         }
         return result;
       }
@@ -1367,6 +1390,7 @@ public class DFSOutputStream extends FSOutputSummer
     computePacketChunkSize(dfsClient.getConf().writePacketSize,
         checksum.getBytesPerChecksum());
 
+
     streamer = new DataStreamer();
     if (favoredNodes != null && favoredNodes.length != 0) {
       streamer.setFavoredNodes(favoredNodes);
@@ -1378,11 +1402,20 @@ public class DFSOutputStream extends FSOutputSummer
       short replication, long blockSize, Progressable progress, int buffersize,
       DataChecksum checksum, String[] favoredNodes) throws IOException {
     final HdfsFileStatus stat;
+
+    TraceScope traceScope = null;
+
+    if (Trace.isTracing()) {
+      traceScope = Trace.startSpan("DFSOutputStream");
+      traceScope.getSpan().addTimelineAnnotation("Creating file " + src);
+    }
+
     try {
       stat = dfsClient.namenode.create(src, masked, dfsClient.clientName,
           new EnumSetWritable<CreateFlag>(flag), createParent, replication,
           blockSize);
     } catch(RemoteException re) {
+      if (traceScope != null) traceScope.close();
       throw re.unwrapRemoteException(AccessControlException.class,
                                      DSQuotaExceededException.class,
                                      FileAlreadyExistsException.class,
@@ -1393,9 +1426,17 @@ public class DFSOutputStream extends FSOutputSummer
                                      UnresolvedPathException.class,
                                      SnapshotAccessControlException.class);
     }
+
+
+
     final DFSOutputStream out = new DFSOutputStream(dfsClient, src, stat,
         flag, progress, checksum, favoredNodes);
+    if (traceScope != null) {
+      out.traceSpan = traceScope.detach();
+    }
+
     out.start();
+
     return out;
   }
 
@@ -1485,6 +1526,23 @@ public class DFSOutputStream extends FSOutputSummer
       }
     }
   }
+  // @see FSOutputSummer#write()
+  @Override
+  public synchronized void write(byte b[], int off, int len)
+      throws IOException {
+    TraceScope innerTraceScope = null;
+
+    if (traceSpan != null) {
+      innerTraceScope = Trace.continueSpan(traceSpan.child("DFSOutputStream.write"));
+    }
+
+    try {
+      super.write(b, off, len);
+    } finally {
+      if (innerTraceScope != null) innerTraceScope.close();
+    }
+
+  }
 
   // @see FSOutputSummer#writeChunk()
   @Override
@@ -1539,7 +1597,7 @@ public class DFSOutputStream extends FSOutputSummer
       waitAndQueueCurrentPacket();
 
       // If the reopened file did not end at chunk boundary and the above
-      // write filled up its partial chunk. Tell the summer to generate full 
+      // write filled up its partial chunk. Tell the summer to generate full
       // crc chunks from now on.
       if (appendChunk && bytesCurBlock%bytesPerChecksum == 0) {
         appendChunk = false;
@@ -1547,15 +1605,16 @@ public class DFSOutputStream extends FSOutputSummer
       }
 
       if (!appendChunk) {
-        int psize = Math.min((int)(blockSize-bytesCurBlock), dfsClient.getConf().writePacketSize);
+        int psize = Math.min((int)(blockSize-bytesCurBlock),
+                             dfsClient.getConf().writePacketSize);
         computePacketChunkSize(psize, bytesPerChecksum);
       }
       //
-      // if encountering a block boundary, send an empty packet to 
+      // if encountering a block boundary, send an empty packet to
       // indicate the end of block and reset bytesCurBlock.
       //
       if (bytesCurBlock == blockSize) {
-        currentPacket = new Packet(0, 0, bytesCurBlock, 
+        currentPacket = new Packet(0, 0, bytesCurBlock,
             currentSeqno++, this.checksum.getChecksumSize());
         currentPacket.lastPacketInBlock = true;
         currentPacket.syncBlock = shouldSyncBlock;
@@ -1619,6 +1678,11 @@ public class DFSOutputStream extends FSOutputSummer
       throws IOException {
     dfsClient.checkOpen();
     checkClosed();
+    TraceScope innerTraceScope = null;
+    if (traceSpan != null) {
+      innerTraceScope = Trace.continueSpan(traceSpan.child("DFSOutputStream.flushOrSync"));
+      innerTraceScope.getSpan().addKVAnnotation("isSync".getBytes(), ("" + isSync).getBytes());
+    }
     try {
       long toWaitFor;
       long lastBlockLength = -1L;
@@ -1731,6 +1795,8 @@ public class DFSOutputStream extends FSOutputSummer
         }
       }
       throw e;
+    } finally {
+      if (innerTraceScope != null) innerTraceScope.close();
     }
   }
 
@@ -1855,6 +1921,11 @@ public class DFSOutputStream extends FSOutputSummer
         throw e;
     }
 
+    TraceScope innerTraceScope = null;
+    if (traceSpan != null) {
+      innerTraceScope = Trace.continueSpan(traceSpan.child("DFSOutputStream.close"));
+    }
+
     try {
       flushBuffer();       // flush from all upper layers
 
@@ -1878,6 +1949,8 @@ public class DFSOutputStream extends FSOutputSummer
       dfsClient.endFileLease(src);
     } catch (ClosedChannelException e) {
     } finally {
+      if (innerTraceScope != null) innerTraceScope.close();
+      if (traceSpan != null) traceSpan.stop();
       closed = true;
     }
   }
