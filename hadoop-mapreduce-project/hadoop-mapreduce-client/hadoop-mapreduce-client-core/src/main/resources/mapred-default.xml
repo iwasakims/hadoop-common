@@ -83,6 +83,14 @@
 </property>
 
 <property>
+    <name>mapreduce.job.max.split.locations</name>
+    <value>10</value>
+    <description>The max number of block locations to store for each split for 
+    locality calculation.
+    </description>
+</property>
+
+<property>
   <name>mapreduce.job.split.metainfo.maxsize</name>
   <value>10000000</value>
   <description>The maximum permissible size of the split metainfo file. 
@@ -183,11 +191,16 @@
 
 <property>
   <name>mapreduce.admin.user.env</name>
-  <value>LD_LIBRARY_PATH=$HADOOP_COMMON_HOME/lib/native</value>
-  <description>Expert: Additional execution environment entries for 
+  <value></value>
+  <description>
+  Expert: Additional execution environment entries for 
   map and reduce task processes. This is not an additive property.
   You must preserve the original value if you want your map and
   reduce tasks to have access to native libraries (compression, etc). 
+  When this value is empty, the command to set execution 
+  envrionment will be OS dependent: 
+  For linux, use LD_LIBRARY_PATH=$HADOOP_COMMON_HOME/lib/native.
+  For windows, use PATH = %PATH%;%HADOOP_COMMON_HOME%\\bin.
   </description>
 </property>
 
@@ -995,6 +1008,13 @@
   <value>3</value>
   <description>The number of client retries to the AM - before reconnecting
     to the RM to fetch Application Status.</description>
+</property>
+
+<property>
+  <name>yarn.app.mapreduce.client-am.ipc.max-retries-on-timeouts</name>
+  <value>3</value>
+  <description>The number of client retries on socket timeouts to the AM - before
+    reconnecting to the RM to fetch Application Status.</description>
 </property>
 
 <property>

@@ -164,6 +164,20 @@ Release 2.3.0 - UNRELEASED
 
     MAPREDUCE-4421. Run MapReduce framework via the distributed cache (jlowe)
 
+    MAPREDUCE-1176. FixedLengthInputFormat and FixedLengthRecordReader
+    (Mariappan Asokan and BitsOfInfo via Sandy Ryza)
+
+    MAPREDUCE-5613. DefaultSpeculator holds and checks hashmap that is always
+    empty (Gera Shegalov via Sandy Ryza)
+
+    MAPREDUCE-5431. Missing pom dependency in MR-client (Timothy St. Clair
+    via stevel)
+
+    MAPREDUCE-5624 Move grizzly-test and junit dependencies to test scope
+    (Ted Yu via stevel)
+
+    MAPREDUCE-5481. Enable uber jobs to have multiple reducers (Sandy Ryza)
+
   OPTIMIZATIONS
 
     MAPREDUCE-5484. YarnChild unnecessarily loads job conf twice (Sandy Ryza)
@@ -196,6 +210,21 @@ Release 2.3.0 - UNRELEASED
 
     MAPREDUCE-5585. TestCopyCommitter#testNoCommitAction Fails on JDK7
     (jeagles)
+
+    MAPREDUCE-5186. mapreduce.job.max.split.locations causes some splits
+    created by CombineFileInputFormat to fail (Robert Parker and Jason Lowe
+    via jlowe)
+
+    MAPREDUCE-5610. TestSleepJob fails in jdk7 (Jonathan Eagles via jlowe)
+
+    MAPREDUCE-5616. MR Client-AppMaster RPC max retries on socket timeout is too
+    high. (cnauroth)
+
+    MAPREDUCE-5625. TestFixedLengthInputFormat fails in jdk7 environment
+    (Mariappan Asokan via jeagles)
+
+    MAPREDUCE-5631. TestJobEndNotifier.testNotifyRetries fails with Should
+    have taken more than 5 seconds in jdk7 (Jonathan Eagles via jlowe)
 
 Release 2.2.1 - UNRELEASED
 
@@ -242,6 +271,9 @@ Release 2.2.1 - UNRELEASED
 
     MAPREDUCE-5604. TestMRAMWithNonNormalizedCapabilities fails on Windows due to
     exceeding max path length. (cnauroth)
+
+    MAPREDUCE-5451. MR uses LD_LIBRARY_PATH which doesn't mean anything in
+    Windows. (Yingda Chen via cnauroth)
 
 Release 2.2.0 - 2013-10-13
 
@@ -1519,6 +1551,9 @@ Release 0.23.10 - UNRELEASED
     run from hadoop-tools/hadoop-distcp directory (jeagles)
 
     MAPREDUCE-5587. TestTextOutputFormat fails on JDK7 (jeagles)
+
+    MAPREDUCE-5373. TestFetchFailure.testFetchFailureMultipleReduces could fail
+    intermittently (jeagles)
 
 Release 0.23.9 - 2013-07-08
 

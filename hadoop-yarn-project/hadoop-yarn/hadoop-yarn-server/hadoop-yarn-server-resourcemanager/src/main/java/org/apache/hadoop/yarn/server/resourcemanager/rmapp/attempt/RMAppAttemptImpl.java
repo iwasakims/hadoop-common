@@ -53,6 +53,7 @@ import org.apache.hadoop.yarn.api.records.ContainerStatus;
 import org.apache.hadoop.yarn.api.records.FinalApplicationStatus;
 import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.Priority;
+import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
 import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.factories.RecordFactory;
@@ -68,11 +69,14 @@ import org.apache.hadoop.yarn.server.resourcemanager.recovery.RMStateStore.Appli
 import org.apache.hadoop.yarn.server.resourcemanager.recovery.RMStateStore.ApplicationState;
 import org.apache.hadoop.yarn.server.resourcemanager.recovery.RMStateStore.RMState;
 import org.apache.hadoop.yarn.server.resourcemanager.recovery.Recoverable;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppFailedAttemptEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppFinishedAttemptEvent;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppRejectedEvent;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppState;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.event.RMAppAttemptContainerAcquiredEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.event.RMAppAttemptContainerFinishedEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.event.RMAppAttemptLaunchFailedEvent;
@@ -179,7 +183,7 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
             new UnexpectedAMRegisteredTransition(), RMAppAttemptState.FAILED))
       .addTransition( RMAppAttemptState.NEW,
           EnumSet.of(RMAppAttemptState.FINISHED, RMAppAttemptState.KILLED,
-            RMAppAttemptState.FAILED, RMAppAttemptState.RECOVERED),
+            RMAppAttemptState.FAILED, RMAppAttemptState.LAUNCHED),
           RMAppAttemptEventType.RECOVER, new AttemptRecoveredTransition())
           
       // Transitions from SUBMITTED state
@@ -382,25 +386,6 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
               RMAppAttemptEventType.EXPIRE,
               RMAppAttemptEventType.REGISTERED,
               RMAppAttemptEventType.CONTAINER_ALLOCATED,
-              RMAppAttemptEventType.CONTAINER_FINISHED,
-              RMAppAttemptEventType.UNREGISTERED,
-              RMAppAttemptEventType.KILL,
-              RMAppAttemptEventType.STATUS_UPDATE))
-              
-      // Transitions from RECOVERED State
-      .addTransition(
-          RMAppAttemptState.RECOVERED,
-          RMAppAttemptState.RECOVERED,
-          EnumSet.of(RMAppAttemptEventType.START,
-              RMAppAttemptEventType.APP_ACCEPTED,
-              RMAppAttemptEventType.APP_REJECTED,
-              RMAppAttemptEventType.EXPIRE,
-              RMAppAttemptEventType.LAUNCHED,
-              RMAppAttemptEventType.LAUNCH_FAILED,
-              RMAppAttemptEventType.REGISTERED,
-              RMAppAttemptEventType.CONTAINER_ALLOCATED,
-              RMAppAttemptEventType.CONTAINER_ACQUIRED,
-              RMAppAttemptEventType.ATTEMPT_NEW_SAVED,
               RMAppAttemptEventType.CONTAINER_FINISHED,
               RMAppAttemptEventType.UNREGISTERED,
               RMAppAttemptEventType.KILL,
@@ -669,7 +654,14 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
   public ApplicationResourceUsageReport getApplicationResourceUsageReport() {
     this.readLock.lock();
     try {
-      return scheduler.getAppResourceUsageReport(this.getAppAttemptId());
+      ApplicationResourceUsageReport report =
+          scheduler.getAppResourceUsageReport(this.getAppAttemptId());
+      if (report == null) {
+        Resource none = Resource.newInstance(0, 0);
+        report = ApplicationResourceUsageReport.newInstance(0, 0, none, none,
+            none);
+      }
+      return report;
     } finally {
       this.readLock.unlock();
     }
@@ -694,8 +686,6 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
     this.proxiedTrackingUrl = generateProxyUriWithScheme(originalTrackingUrl);
     this.finalStatus = attemptState.getFinalApplicationStatus();
     this.startTime = attemptState.getStartTime();
-    handle(new RMAppAttemptEvent(getAppAttemptId(),
-      RMAppAttemptEventType.RECOVER));
   }
 
   private void recoverAppAttemptCredentials(Credentials appAttemptTokens)
@@ -865,11 +855,38 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
     @Override
     public RMAppAttemptState transition(RMAppAttemptImpl appAttempt,
         RMAppAttemptEvent event) {
+      LOG.info("Recovering attempt :  recoverdFinalState :"
+          + appAttempt.recoveredFinalState);
       if (appAttempt.recoveredFinalState != null) {
         appAttempt.progress = 1.0f;
+        RMApp rmApp =appAttempt.rmContext.getRMApps().get(
+            appAttempt.getAppAttemptId().getApplicationId());
+        // We will replay the final attempt only if last attempt is in final
+        // state but application is not in final state.
+        if (rmApp.getCurrentAppAttempt() == appAttempt
+            && !RMAppImpl.isAppInFinalState(rmApp)) {
+          (new BaseFinalTransition(appAttempt.recoveredFinalState)).transition(
+              appAttempt, event);
+        }
         return appAttempt.recoveredFinalState;
       } else {
-        return RMAppAttemptState.RECOVERED;
+        /*
+         * Since the application attempt's final state is not saved that means
+         * for AM container (previous attempt) state must be one of these.
+         * 1) AM container may not have been launched (RM failed right before
+         * this).
+         * 2) AM container was successfully launched but may or may not have
+         * registered / unregistered.
+         * In whichever case we will wait (by moving attempt into LAUNCHED
+         * state) and mark this attempt failed (assuming non work preserving
+         * restart) only after
+         * 1) Node manager during re-registration heart beats back saying
+         * am container finished.
+         * 2) OR AMLivelinessMonitor expires this attempt (when am doesn't
+         * heart beat back).  
+         */
+        (new AMLaunchedTransition()).transition(appAttempt, event);
+        return RMAppAttemptState.LAUNCHED;
       }
     }
   }

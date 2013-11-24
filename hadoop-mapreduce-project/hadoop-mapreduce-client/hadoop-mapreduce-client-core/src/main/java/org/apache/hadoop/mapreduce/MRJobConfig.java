@@ -357,13 +357,21 @@ public interface MRJobConfig {
 
   public static final String MR_AM_PREFIX = MR_PREFIX + "am.";
 
-  /** The number of client retires to the AM - before reconnecting to the RM
+  /** The number of client retries to the AM - before reconnecting to the RM
    * to fetch Application State. 
    */
   public static final String MR_CLIENT_TO_AM_IPC_MAX_RETRIES = 
     MR_PREFIX + "client-am.ipc.max-retries";
   public static final int DEFAULT_MR_CLIENT_TO_AM_IPC_MAX_RETRIES = 3;
   
+  /** The number of client retries on socket timeouts to the AM - before
+   * reconnecting to the RM to fetch Application Status.
+   */
+  public static final String MR_CLIENT_TO_AM_IPC_MAX_RETRIES_ON_TIMEOUTS =
+    MR_PREFIX + "yarn.app.mapreduce.client-am.ipc.max-retries-on-timeouts";
+  public static final int
+    DEFAULT_MR_CLIENT_TO_AM_IPC_MAX_RETRIES_ON_TIMEOUTS = 3;
+
   /**
    * The number of client retries to the RM/HS before throwing exception.
    */
@@ -575,8 +583,10 @@ public interface MRJobConfig {
   public static final String MAPRED_ADMIN_USER_ENV =
       "mapreduce.admin.user.env";
 
-  public static final String DEFAULT_MAPRED_ADMIN_USER_ENV =
-      "LD_LIBRARY_PATH=$HADOOP_COMMON_HOME/lib/native";
+  public final String DEFAULT_MAPRED_ADMIN_USER_ENV = 
+      Shell.WINDOWS ? 
+          "PATH=%PATH%;%HADOOP_COMMON_HOME%\\bin":
+          "LD_LIBRARY_PATH=$HADOOP_COMMON_HOME/lib/native";
 
   public static final String WORKDIR = "work";
 

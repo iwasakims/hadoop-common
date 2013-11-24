@@ -17,16 +17,18 @@
  */
 package org.apache.hadoop.hdfs.server.namenode;
 
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_BLOCK_SIZE_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CACHEREPORT_INTERVAL_MSEC_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_MAX_LOCKED_MEMORY_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY;
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_BLOCK_SIZE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CACHING_ENABLED_KEY;
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CACHEREPORT_INTERVAL_MSEC_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_PATH_BASED_CACHE_REFRESH_INTERVAL_MS;
-import static junit.framework.Assert.assertTrue;
-import static junit.framework.Assert.fail;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
@@ -35,43 +37,48 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 
-import junit.framework.Assert;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.BlockLocation;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileSystemTestHelper;
+import org.apache.hadoop.fs.InvalidRequestException;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
-import org.apache.hadoop.hdfs.protocol.AddPathBasedCacheDirectiveException.InvalidPathNameError;
-import org.apache.hadoop.hdfs.protocol.AddPathBasedCacheDirectiveException.InvalidPoolNameError;
-import org.apache.hadoop.hdfs.protocol.AddPathBasedCacheDirectiveException.PoolWritePermissionDeniedError;
+import org.apache.hadoop.hdfs.protocol.CacheDirectiveEntry;
+import org.apache.hadoop.hdfs.protocol.CacheDirectiveStats;
 import org.apache.hadoop.hdfs.protocol.CachePoolInfo;
-import org.apache.hadoop.hdfs.protocol.PathBasedCacheDescriptor;
-import org.apache.hadoop.hdfs.protocol.PathBasedCacheDirective;
-import org.apache.hadoop.hdfs.protocol.RemovePathBasedCacheDescriptorException.InvalidIdException;
-import org.apache.hadoop.hdfs.protocol.RemovePathBasedCacheDescriptorException.NoSuchIdException;
+import org.apache.hadoop.hdfs.protocol.CacheDirectiveInfo;
+import org.apache.hadoop.hdfs.server.blockmanagement.CacheReplicationMonitor;
 import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeDescriptor.CachedBlocksList.Type;
+import org.apache.hadoop.hdfs.server.namenode.EditLogFileOutputStream;
 import org.apache.hadoop.hdfs.server.protocol.NamenodeProtocols;
 import org.apache.hadoop.io.nativeio.NativeIO;
+import org.apache.hadoop.io.nativeio.NativeIO.POSIX.CacheManipulator;
+import org.apache.hadoop.io.nativeio.NativeIO.POSIX.NoMlockCacheManipulator;
+import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.util.GSet;
+import org.apache.log4j.Level;
+import org.apache.log4j.LogManager;
 import org.junit.After;
-import org.junit.Assume;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
 import com.google.common.base.Supplier;
 
-public class TestPathBasedCacheRequests {
-  static final Log LOG = LogFactory.getLog(TestPathBasedCacheRequests.class);
+public class TestCacheDirectives {
+  static final Log LOG = LogFactory.getLog(TestCacheDirectives.class);
 
   private static final UserGroupInformation unprivilegedUser =
       UserGroupInformation.createRemoteUser("unprivilegedUser");
@@ -80,17 +87,25 @@ public class TestPathBasedCacheRequests {
   static private MiniDFSCluster cluster;
   static private DistributedFileSystem dfs;
   static private NamenodeProtocols proto;
+  static private CacheManipulator prevCacheManipulator;
+
+  static {
+    EditLogFileOutputStream.setShouldSkipFsyncForTesting(false);
+  }
 
   @Before
   public void setup() throws Exception {
     conf = new HdfsConfiguration();
     // set low limits here for testing purposes
     conf.setInt(DFSConfigKeys.DFS_NAMENODE_LIST_CACHE_POOLS_NUM_RESPONSES, 2);
-    conf.setInt(DFSConfigKeys.DFS_NAMENODE_LIST_CACHE_DESCRIPTORS_NUM_RESPONSES, 2);
+    conf.setInt(DFSConfigKeys.DFS_NAMENODE_LIST_CACHE_DIRECTIVES_NUM_RESPONSES, 2);
     cluster = new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
     cluster.waitActive();
     dfs = cluster.getFileSystem();
     proto = cluster.getNameNodeRpc();
+    prevCacheManipulator = NativeIO.POSIX.getCacheManipulator();
+    NativeIO.POSIX.setCacheManipulator(new NoMlockCacheManipulator());
+    LogManager.getLogger(CacheReplicationMonitor.class).setLevel(Level.TRACE);
   }
 
   @After
@@ -98,6 +113,8 @@ public class TestPathBasedCacheRequests {
     if (cluster != null) {
       cluster.shutdown();
     }
+    // Restore the original CacheManipulator
+    NativeIO.POSIX.setCacheManipulator(prevCacheManipulator);
   }
 
   @Test(timeout=60000)
@@ -191,15 +208,15 @@ public class TestPathBasedCacheRequests {
       fail("expected to get an exception when " +
           "removing a non-existent pool.");
     } catch (IOException ioe) {
-      GenericTestUtils.assertExceptionContains("can't remove " +
+      GenericTestUtils.assertExceptionContains("Cannot remove " +
           "non-existent cache pool", ioe);
     }
     try {
       dfs.removeCachePool(poolName);
-      Assert.fail("expected to get an exception when " +
+      fail("expected to get an exception when " +
           "removing a non-existent pool.");
     } catch (IOException ioe) {
-      GenericTestUtils.assertExceptionContains("can't remove " +
+      GenericTestUtils.assertExceptionContains("Cannot remove " +
           "non-existent cache pool", ioe);
     }
     try {
@@ -276,18 +293,18 @@ public class TestPathBasedCacheRequests {
 
     try {
       proto.removeCachePool("pool99");
-      Assert.fail("expected to get an exception when " +
+      fail("expected to get an exception when " +
           "removing a non-existent pool.");
     } catch (IOException ioe) {
-      GenericTestUtils.assertExceptionContains("can't remove non-existent",
+      GenericTestUtils.assertExceptionContains("Cannot remove non-existent",
           ioe);
     }
     try {
       proto.removeCachePool(poolName);
-      Assert.fail("expected to get an exception when " +
+      fail("expected to get an exception when " +
           "removing a non-existent pool.");
     } catch (IOException ioe) {
-      GenericTestUtils.assertExceptionContains("can't remove non-existent",
+      GenericTestUtils.assertExceptionContains("Cannot remove non-existent",
           ioe);
     }
 
@@ -296,24 +313,25 @@ public class TestPathBasedCacheRequests {
   }
 
   private static void validateListAll(
-      RemoteIterator<PathBasedCacheDescriptor> iter,
-      PathBasedCacheDescriptor... descriptors) throws Exception {
-    for (PathBasedCacheDescriptor descriptor: descriptors) {
+      RemoteIterator<CacheDirectiveEntry> iter,
+      Long... ids) throws Exception {
+    for (Long id: ids) {
       assertTrue("Unexpectedly few elements", iter.hasNext());
-      assertEquals("Unexpected descriptor", descriptor, iter.next());
+      assertEquals("Unexpected directive ID", id,
+          iter.next().getInfo().getId());
     }
     assertFalse("Unexpectedly many list elements", iter.hasNext());
   }
 
-  private static PathBasedCacheDescriptor addAsUnprivileged(
-      final PathBasedCacheDirective directive) throws Exception {
+  private static long addAsUnprivileged(
+      final CacheDirectiveInfo directive) throws Exception {
     return unprivilegedUser
-        .doAs(new PrivilegedExceptionAction<PathBasedCacheDescriptor>() {
+        .doAs(new PrivilegedExceptionAction<Long>() {
           @Override
-          public PathBasedCacheDescriptor run() throws IOException {
+          public Long run() throws IOException {
             DistributedFileSystem myDfs =
                 (DistributedFileSystem) FileSystem.get(conf);
-            return myDfs.addPathBasedCacheDirective(directive);
+            return myDfs.addCacheDirective(directive);
           }
         });
   }
@@ -329,120 +347,145 @@ public class TestPathBasedCacheRequests {
     proto.addCachePool(new CachePoolInfo("pool4").
         setMode(new FsPermission((short)0)));
 
-    PathBasedCacheDirective alpha = new PathBasedCacheDirective.Builder().
+    CacheDirectiveInfo alpha = new CacheDirectiveInfo.Builder().
         setPath(new Path("/alpha")).
         setPool("pool1").
         build();
-    PathBasedCacheDirective beta = new PathBasedCacheDirective.Builder().
+    CacheDirectiveInfo beta = new CacheDirectiveInfo.Builder().
         setPath(new Path("/beta")).
         setPool("pool2").
         build();
-    PathBasedCacheDirective delta = new PathBasedCacheDirective.Builder().
+    CacheDirectiveInfo delta = new CacheDirectiveInfo.Builder().
         setPath(new Path("/delta")).
         setPool("pool1").
         build();
 
-    PathBasedCacheDescriptor alphaD = addAsUnprivileged(alpha);
-    PathBasedCacheDescriptor alphaD2 = addAsUnprivileged(alpha);
-    assertFalse("Expected to get unique descriptors when re-adding an "
-        + "existing PathBasedCacheDirective",
-        alphaD.getEntryId() == alphaD2.getEntryId());
-    PathBasedCacheDescriptor betaD = addAsUnprivileged(beta);
+    long alphaId = addAsUnprivileged(alpha);
+    long alphaId2 = addAsUnprivileged(alpha);
+    assertFalse("Expected to get unique directives when re-adding an "
+        + "existing CacheDirectiveInfo",
+        alphaId == alphaId2);
+    long betaId = addAsUnprivileged(beta);
 
     try {
-      addAsUnprivileged(new PathBasedCacheDirective.Builder().
+      addAsUnprivileged(new CacheDirectiveInfo.Builder().
           setPath(new Path("/unicorn")).
           setPool("no_such_pool").
           build());
       fail("expected an error when adding to a non-existent pool.");
-    } catch (IOException ioe) {
-      assertTrue(ioe instanceof InvalidPoolNameError);
+    } catch (InvalidRequestException ioe) {
+      GenericTestUtils.assertExceptionContains("Unknown pool", ioe);
     }
 
     try {
-      addAsUnprivileged(new PathBasedCacheDirective.Builder().
+      addAsUnprivileged(new CacheDirectiveInfo.Builder().
           setPath(new Path("/blackhole")).
           setPool("pool4").
           build());
       fail("expected an error when adding to a pool with " +
           "mode 0 (no permissions for anyone).");
-    } catch (IOException ioe) {
-      assertTrue(ioe instanceof PoolWritePermissionDeniedError);
+    } catch (AccessControlException e) {
+      GenericTestUtils.
+          assertExceptionContains("Permission denied while accessing pool", e);
     }
 
     try {
-      addAsUnprivileged(new PathBasedCacheDirective.Builder().
+      addAsUnprivileged(new CacheDirectiveInfo.Builder().
           setPath(new Path("/illegal:path/")).
           setPool("pool1").
           build());
       fail("expected an error when adding a malformed path " +
           "to the cache directives.");
     } catch (IllegalArgumentException e) {
-      // expected
+      GenericTestUtils.assertExceptionContains("is not a valid DFS filename", e);
     }
 
     try {
-      addAsUnprivileged(new PathBasedCacheDirective.Builder().
+      addAsUnprivileged(new CacheDirectiveInfo.Builder().
           setPath(new Path("/emptypoolname")).
           setReplication((short)1).
           setPool("").
           build());
-      Assert.fail("expected an error when adding a PathBasedCache " +
+      fail("expected an error when adding a cache " +
           "directive with an empty pool name.");
-    } catch (IOException ioe) {
-      Assert.assertTrue(ioe instanceof InvalidPoolNameError);
+    } catch (InvalidRequestException e) {
+      GenericTestUtils.assertExceptionContains("Invalid empty pool name", e);
     }
 
-    PathBasedCacheDescriptor deltaD = addAsUnprivileged(delta);
+    long deltaId = addAsUnprivileged(delta);
 
     // We expect the following to succeed, because DistributedFileSystem
     // qualifies the path.
-    PathBasedCacheDescriptor relativeD = addAsUnprivileged(
-        new PathBasedCacheDirective.Builder().
+    long relativeId = addAsUnprivileged(
+        new CacheDirectiveInfo.Builder().
             setPath(new Path("relative")).
             setPool("pool1").
             build());
 
-    RemoteIterator<PathBasedCacheDescriptor> iter;
-    iter = dfs.listPathBasedCacheDescriptors(null, null);
-    validateListAll(iter, alphaD, alphaD2, betaD, deltaD, relativeD);
-    iter = dfs.listPathBasedCacheDescriptors("pool3", null);
-    Assert.assertFalse(iter.hasNext());
-    iter = dfs.listPathBasedCacheDescriptors("pool1", null);
-    validateListAll(iter, alphaD, alphaD2, deltaD, relativeD);
-    iter = dfs.listPathBasedCacheDescriptors("pool2", null);
-    validateListAll(iter, betaD);
-
-    dfs.removePathBasedCacheDescriptor(betaD);
-    iter = dfs.listPathBasedCacheDescriptors("pool2", null);
-    Assert.assertFalse(iter.hasNext());
-
-    try {
-      dfs.removePathBasedCacheDescriptor(betaD);
-      Assert.fail("expected an error when removing a non-existent ID");
-    } catch (IOException ioe) {
-      Assert.assertTrue(ioe instanceof NoSuchIdException);
-    }
-
-    try {
-      proto.removePathBasedCacheDescriptor(-42l);
-      Assert.fail("expected an error when removing a negative ID");
-    } catch (IOException ioe) {
-      Assert.assertTrue(ioe instanceof InvalidIdException);
-    }
-    try {
-      proto.removePathBasedCacheDescriptor(43l);
-      Assert.fail("expected an error when removing a non-existent ID");
-    } catch (IOException ioe) {
-      Assert.assertTrue(ioe instanceof NoSuchIdException);
-    }
-
-    dfs.removePathBasedCacheDescriptor(alphaD);
-    dfs.removePathBasedCacheDescriptor(alphaD2);
-    dfs.removePathBasedCacheDescriptor(deltaD);
-    dfs.removePathBasedCacheDescriptor(relativeD);
-    iter = dfs.listPathBasedCacheDescriptors(null, null);
+    RemoteIterator<CacheDirectiveEntry> iter;
+    iter = dfs.listCacheDirectives(null);
+    validateListAll(iter, alphaId, alphaId2, betaId, deltaId, relativeId );
+    iter = dfs.listCacheDirectives(
+        new CacheDirectiveInfo.Builder().setPool("pool3").build());
     assertFalse(iter.hasNext());
+    iter = dfs.listCacheDirectives(
+        new CacheDirectiveInfo.Builder().setPool("pool1").build());
+    validateListAll(iter, alphaId, alphaId2, deltaId, relativeId );
+    iter = dfs.listCacheDirectives(
+        new CacheDirectiveInfo.Builder().setPool("pool2").build());
+    validateListAll(iter, betaId);
+
+    dfs.removeCacheDirective(betaId);
+    iter = dfs.listCacheDirectives(
+        new CacheDirectiveInfo.Builder().setPool("pool2").build());
+    assertFalse(iter.hasNext());
+
+    try {
+      dfs.removeCacheDirective(betaId);
+      fail("expected an error when removing a non-existent ID");
+    } catch (InvalidRequestException e) {
+      GenericTestUtils.assertExceptionContains("No directive with ID", e);
+    }
+
+    try {
+      proto.removeCacheDirective(-42l);
+      fail("expected an error when removing a negative ID");
+    } catch (InvalidRequestException e) {
+      GenericTestUtils.assertExceptionContains(
+          "Invalid negative ID", e);
+    }
+    try {
+      proto.removeCacheDirective(43l);
+      fail("expected an error when removing a non-existent ID");
+    } catch (InvalidRequestException e) {
+      GenericTestUtils.assertExceptionContains("No directive with ID", e);
+    }
+
+    dfs.removeCacheDirective(alphaId);
+    dfs.removeCacheDirective(alphaId2);
+    dfs.removeCacheDirective(deltaId);
+
+    dfs.modifyCacheDirective(new CacheDirectiveInfo.Builder().
+        setId(relativeId).
+        setReplication((short)555).
+        build());
+    iter = dfs.listCacheDirectives(null);
+    assertTrue(iter.hasNext());
+    CacheDirectiveInfo modified = iter.next().getInfo();
+    assertEquals(relativeId, modified.getId().longValue());
+    assertEquals((short)555, modified.getReplication().shortValue());
+    dfs.removeCacheDirective(relativeId);
+    iter = dfs.listCacheDirectives(null);
+    assertFalse(iter.hasNext());
+
+    // Verify that PBCDs with path "." work correctly
+    CacheDirectiveInfo directive =
+        new CacheDirectiveInfo.Builder().setPath(new Path("."))
+            .setPool("pool1").build();
+    long id = dfs.addCacheDirective(directive);
+    dfs.modifyCacheDirective(new CacheDirectiveInfo.Builder(
+        directive).setId(id).setReplication((short)2).build());
+    dfs.removeCacheDirective(id);
   }
 
   @Test(timeout=60000)
@@ -476,21 +519,22 @@ public class TestPathBasedCacheRequests {
     // Create some cache entries
     int numEntries = 10;
     String entryPrefix = "/party-";
+    long prevId = -1;
     for (int i=0; i<numEntries; i++) {
-      dfs.addPathBasedCacheDirective(
-          new PathBasedCacheDirective.Builder().
+      prevId = dfs.addCacheDirective(
+          new CacheDirectiveInfo.Builder().
             setPath(new Path(entryPrefix + i)).setPool(pool).build());
     }
-    RemoteIterator<PathBasedCacheDescriptor> dit
-        = dfs.listPathBasedCacheDescriptors(null, null);
+    RemoteIterator<CacheDirectiveEntry> dit
+        = dfs.listCacheDirectives(null);
     for (int i=0; i<numEntries; i++) {
       assertTrue("Unexpected # of cache entries: " + i, dit.hasNext());
-      PathBasedCacheDescriptor cd = dit.next();
-      assertEquals(i+1, cd.getEntryId());
+      CacheDirectiveInfo cd = dit.next().getInfo();
+      assertEquals(i+1, cd.getId().longValue());
       assertEquals(entryPrefix + i, cd.getPath().toUri().getPath());
       assertEquals(pool, cd.getPool());
     }
-    assertFalse("Unexpected # of cache descriptors found", dit.hasNext());
+    assertFalse("Unexpected # of cache directives found", dit.hasNext());
   
     // Restart namenode
     cluster.restartNameNode();
@@ -506,20 +550,33 @@ public class TestPathBasedCacheRequests {
     assertEquals(weight, (int)info.getWeight());
     assertFalse("Unexpected # of cache pools found", pit.hasNext());
   
-    dit = dfs.listPathBasedCacheDescriptors(null, null);
+    dit = dfs.listCacheDirectives(null);
     for (int i=0; i<numEntries; i++) {
       assertTrue("Unexpected # of cache entries: " + i, dit.hasNext());
-      PathBasedCacheDescriptor cd = dit.next();
-      assertEquals(i+1, cd.getEntryId());
+      CacheDirectiveInfo cd = dit.next().getInfo();
+      assertEquals(i+1, cd.getId().longValue());
       assertEquals(entryPrefix + i, cd.getPath().toUri().getPath());
       assertEquals(pool, cd.getPool());
     }
-    assertFalse("Unexpected # of cache descriptors found", dit.hasNext());
+    assertFalse("Unexpected # of cache directives found", dit.hasNext());
+
+    long nextId = dfs.addCacheDirective(
+          new CacheDirectiveInfo.Builder().
+            setPath(new Path("/foobar")).setPool(pool).build());
+    assertEquals(prevId + 1, nextId);
   }
 
+  /**
+   * Wait for the NameNode to have an expected number of cached blocks
+   * and replicas.
+   * @param nn NameNode
+   * @param expectedCachedBlocks
+   * @param expectedCachedReplicas
+   * @throws Exception
+   */
   private static void waitForCachedBlocks(NameNode nn,
-      final int expectedCachedBlocks, final int expectedCachedReplicas) 
-          throws Exception {
+      final int expectedCachedBlocks, final int expectedCachedReplicas,
+      final String logString) throws Exception {
     final FSNamesystem namesystem = nn.getNamesystem();
     final CacheManager cacheManager = namesystem.getCacheManager();
     LOG.info("Waiting for " + expectedCachedBlocks + " blocks with " +
@@ -547,9 +604,9 @@ public class TestPathBasedCacheRequests {
             (numCachedReplicas == expectedCachedReplicas)) {
           return true;
         } else {
-          LOG.info("cached blocks: have " + numCachedBlocks +
-              " / " + expectedCachedBlocks);
-          LOG.info("cached replicas: have " + numCachedReplicas +
+          LOG.info(logString + " cached blocks: have " + numCachedBlocks +
+              " / " + expectedCachedBlocks + ".  " +
+              "cached replicas: have " + numCachedReplicas +
               " / " + expectedCachedReplicas);
           return false;
         }
@@ -557,25 +614,83 @@ public class TestPathBasedCacheRequests {
     }, 500, 60000);
   }
 
+  private static void waitForCachedStats(final DistributedFileSystem dfs,
+      final long targetFilesAffected, final long targetBytesNeeded,
+        final long targetBytesCached,
+          final CacheDirectiveInfo filter, final String infoString)
+            throws Exception {
+      LOG.info("Polling listDirectives{" + 
+          ((filter == null) ? "ALL" : filter.toString()) +
+          " for " + targetFilesAffected + " targetFilesAffected, " +
+          targetBytesNeeded + " targetBytesNeeded, " +
+          targetBytesCached + " targetBytesCached");
+      GenericTestUtils.waitFor(new Supplier<Boolean>() {
+        @Override
+        public Boolean get() {
+          RemoteIterator<CacheDirectiveEntry> iter = null;
+          CacheDirectiveEntry entry = null;
+          try {
+            iter = dfs.listCacheDirectives(filter);
+            entry = iter.next();
+          } catch (IOException e) {
+            fail("got IOException while calling " +
+                "listCacheDirectives: " + e.getMessage());
+          }
+          Assert.assertNotNull(entry);
+          CacheDirectiveStats stats = entry.getStats();
+          if ((targetFilesAffected == stats.getFilesAffected()) &&
+              (targetBytesNeeded == stats.getBytesNeeded()) &&
+              (targetBytesCached == stats.getBytesCached())) {
+            return true;
+          } else {
+            LOG.info(infoString + ": filesAffected: " + 
+              stats.getFilesAffected() + "/" + targetFilesAffected +
+              ", bytesNeeded: " +
+                stats.getBytesNeeded() + "/" + targetBytesNeeded +
+              ", bytesCached: " + 
+                stats.getBytesCached() + "/" + targetBytesCached);
+            return false;
+          }
+        }
+      }, 500, 60000);
+  }
+
+  private static void checkNumCachedReplicas(final DistributedFileSystem dfs,
+      final List<Path> paths, final int expectedBlocks,
+      final int expectedReplicas)
+      throws Exception {
+    int numCachedBlocks = 0;
+    int numCachedReplicas = 0;
+    for (Path p: paths) {
+      final FileStatus f = dfs.getFileStatus(p);
+      final long len = f.getLen();
+      final long blockSize = f.getBlockSize();
+      // round it up to full blocks
+      final long numBlocks = (len + blockSize - 1) / blockSize;
+      BlockLocation[] locs = dfs.getFileBlockLocations(p, 0, len);
+      assertEquals("Unexpected number of block locations for path " + p,
+          numBlocks, locs.length);
+      for (BlockLocation l: locs) {
+        if (l.getCachedHosts().length > 0) {
+          numCachedBlocks++;
+        }
+        numCachedReplicas += l.getCachedHosts().length;
+      }
+    }
+    LOG.info("Found " + numCachedBlocks + " of " + expectedBlocks + " blocks");
+    LOG.info("Found " + numCachedReplicas + " of " + expectedReplicas
+        + " replicas");
+    assertEquals("Unexpected number of cached blocks", expectedBlocks,
+        numCachedBlocks);
+    assertEquals("Unexpected number of cached replicas", expectedReplicas,
+        numCachedReplicas);
+  }
+
   private static final long BLOCK_SIZE = 512;
   private static final int NUM_DATANODES = 4;
 
   // Most Linux installs will allow non-root users to lock 64KB.
   private static final long CACHE_CAPACITY = 64 * 1024 / NUM_DATANODES;
-
-  /**
-   * Return true if we can test DN caching.
-   */
-  private static boolean canTestDatanodeCaching() {
-    if (!NativeIO.isAvailable()) {
-      // Need NativeIO in order to cache blocks on the DN.
-      return false;
-    }
-    if (NativeIO.getMemlockLimit() < CACHE_CAPACITY) {
-      return false;
-    }
-    return true;
-  }
 
   private static HdfsConfiguration createCachingConf() {
     HdfsConfiguration conf = new HdfsConfiguration();
@@ -590,7 +705,6 @@ public class TestPathBasedCacheRequests {
 
   @Test(timeout=120000)
   public void testWaitForCachedReplicas() throws Exception {
-    Assume.assumeTrue(canTestDatanodeCaching());
     HdfsConfiguration conf = createCachingConf();
     FileSystemTestHelper helper = new FileSystemTestHelper();
     MiniDFSCluster cluster =
@@ -616,32 +730,29 @@ public class TestPathBasedCacheRequests {
         paths.add(p.toUri().getPath());
       }
       // Check the initial statistics at the namenode
-      waitForCachedBlocks(namenode, 0, 0);
+      waitForCachedBlocks(namenode, 0, 0, "testWaitForCachedReplicas:0");
       // Cache and check each path in sequence
       int expected = 0;
       for (int i=0; i<numFiles; i++) {
-        PathBasedCacheDirective directive =
-            new PathBasedCacheDirective.Builder().
+        CacheDirectiveInfo directive =
+            new CacheDirectiveInfo.Builder().
               setPath(new Path(paths.get(i))).
               setPool(pool).
               build();
-        PathBasedCacheDescriptor descriptor =
-            nnRpc.addPathBasedCacheDirective(directive);
-        assertEquals("Descriptor does not match requested path",
-            new Path(paths.get(i)), descriptor.getPath());
-        assertEquals("Descriptor does not match requested pool", pool,
-            descriptor.getPool());
+        nnRpc.addCacheDirective(directive);
         expected += numBlocksPerFile;
-        waitForCachedBlocks(namenode, expected, expected);
+        waitForCachedBlocks(namenode, expected, expected,
+            "testWaitForCachedReplicas:1");
       }
       // Uncache and check each path in sequence
-      RemoteIterator<PathBasedCacheDescriptor> entries =
-          nnRpc.listPathBasedCacheDescriptors(0, null, null);
+      RemoteIterator<CacheDirectiveEntry> entries =
+          nnRpc.listCacheDirectives(0, null);
       for (int i=0; i<numFiles; i++) {
-        PathBasedCacheDescriptor descriptor = entries.next();
-        nnRpc.removePathBasedCacheDescriptor(descriptor.getEntryId());
+        CacheDirectiveEntry entry = entries.next();
+        nnRpc.removeCacheDirective(entry.getInfo().getId());
         expected -= numBlocksPerFile;
-        waitForCachedBlocks(namenode, expected, expected);
+        waitForCachedBlocks(namenode, expected, expected,
+            "testWaitForCachedReplicas:2");
       }
     } finally {
       cluster.shutdown();
@@ -649,9 +760,8 @@ public class TestPathBasedCacheRequests {
   }
 
   @Test(timeout=120000)
-  public void testAddingPathBasedCacheDirectivesWhenCachingIsDisabled()
+  public void testAddingCacheDirectiveInfosWhenCachingIsDisabled()
       throws Exception {
-    Assume.assumeTrue(canTestDatanodeCaching());
     HdfsConfiguration conf = createCachingConf();
     conf.setBoolean(DFS_NAMENODE_CACHING_ENABLED_KEY, false);
     MiniDFSCluster cluster =
@@ -675,20 +785,23 @@ public class TestPathBasedCacheRequests {
         paths.add(p.toUri().getPath());
       }
       // Check the initial statistics at the namenode
-      waitForCachedBlocks(namenode, 0, 0);
+      waitForCachedBlocks(namenode, 0, 0,
+          "testAddingCacheDirectiveInfosWhenCachingIsDisabled:0");
       // Cache and check each path in sequence
       int expected = 0;
       for (int i=0; i<numFiles; i++) {
-        PathBasedCacheDirective directive =
-            new PathBasedCacheDirective.Builder().
+        CacheDirectiveInfo directive =
+            new CacheDirectiveInfo.Builder().
               setPath(new Path(paths.get(i))).
               setPool(pool).
               build();
-        dfs.addPathBasedCacheDirective(directive);
-        waitForCachedBlocks(namenode, expected, 0);
+        dfs.addCacheDirective(directive);
+        waitForCachedBlocks(namenode, expected, 0,
+          "testAddingCacheDirectiveInfosWhenCachingIsDisabled:1");
       }
       Thread.sleep(20000);
-      waitForCachedBlocks(namenode, expected, 0);
+      waitForCachedBlocks(namenode, expected, 0,
+          "testAddingCacheDirectiveInfosWhenCachingIsDisabled:2");
     } finally {
       cluster.shutdown();
     }
@@ -696,7 +809,6 @@ public class TestPathBasedCacheRequests {
 
   @Test(timeout=120000)
   public void testWaitForCachedReplicasInDirectory() throws Exception {
-    Assume.assumeTrue(canTestDatanodeCaching());
     HdfsConfiguration conf = createCachingConf();
     MiniDFSCluster cluster =
       new MiniDFSCluster.Builder(conf).numDataNodes(NUM_DATANODES).build();
@@ -721,23 +833,162 @@ public class TestPathBasedCacheRequests {
         FileSystemTestHelper.createFile(dfs, path, numBlocksPerFile,
             (int)BLOCK_SIZE, (short)3, false);
       }
-      waitForCachedBlocks(namenode, 0, 0);
+      waitForCachedBlocks(namenode, 0, 0,
+          "testWaitForCachedReplicasInDirectory:0");
       // cache entire directory
-      PathBasedCacheDescriptor descriptor = dfs.addPathBasedCacheDirective(
-            new PathBasedCacheDirective.Builder().
+      long id = dfs.addCacheDirective(
+            new CacheDirectiveInfo.Builder().
               setPath(new Path("/foo")).
               setReplication((short)2).
               setPool(pool).
               build());
-      assertEquals("Descriptor does not match requested pool", pool,
-          descriptor.getPool());
-      waitForCachedBlocks(namenode, 4, 8);
+      waitForCachedBlocks(namenode, 4, 8,
+          "testWaitForCachedReplicasInDirectory:1");
+      // Verify that listDirectives gives the stats we want.
+      waitForCachedStats(dfs, 2,
+          8 * BLOCK_SIZE, 8 * BLOCK_SIZE,
+          new CacheDirectiveInfo.Builder().
+              setPath(new Path("/foo")).
+              build(),
+          "testWaitForCachedReplicasInDirectory:2");
+      long id2 = dfs.addCacheDirective(
+            new CacheDirectiveInfo.Builder().
+              setPath(new Path("/foo/bar")).
+              setReplication((short)4).
+              setPool(pool).
+              build());
+      // wait for an additional 2 cached replicas to come up
+      waitForCachedBlocks(namenode, 4, 10,
+          "testWaitForCachedReplicasInDirectory:3");
+      // the directory directive's stats are unchanged
+      waitForCachedStats(dfs, 2,
+          8 * BLOCK_SIZE, 8 * BLOCK_SIZE,
+          new CacheDirectiveInfo.Builder().
+              setPath(new Path("/foo")).
+              build(),
+          "testWaitForCachedReplicasInDirectory:4");
+      // verify /foo/bar's stats
+      waitForCachedStats(dfs, 1,
+          4 * numBlocksPerFile * BLOCK_SIZE,
+          // only 3 because the file only has 3 replicas, not 4 as requested.
+          3 * numBlocksPerFile * BLOCK_SIZE,
+          new CacheDirectiveInfo.Builder().
+              setPath(new Path("/foo/bar")).
+              build(),
+          "testWaitForCachedReplicasInDirectory:5");
       // remove and watch numCached go to 0
-      dfs.removePathBasedCacheDescriptor(descriptor);
-      waitForCachedBlocks(namenode, 0, 0);
+      dfs.removeCacheDirective(id);
+      dfs.removeCacheDirective(id2);
+      waitForCachedBlocks(namenode, 0, 0,
+          "testWaitForCachedReplicasInDirectory:6");
     } finally {
       cluster.shutdown();
     }
   }
 
+  /**
+   * Tests stepping the cache replication factor up and down, checking the
+   * number of cached replicas and blocks as well as the advertised locations.
+   * @throws Exception
+   */
+  @Test(timeout=120000)
+  public void testReplicationFactor() throws Exception {
+    HdfsConfiguration conf = createCachingConf();
+    MiniDFSCluster cluster =
+      new MiniDFSCluster.Builder(conf).numDataNodes(NUM_DATANODES).build();
+
+    try {
+      cluster.waitActive();
+      DistributedFileSystem dfs = cluster.getFileSystem();
+      NameNode namenode = cluster.getNameNode();
+      // Create the pool
+      final String pool = "friendlyPool";
+      dfs.addCachePool(new CachePoolInfo(pool));
+      // Create some test files
+      final List<Path> paths = new LinkedList<Path>();
+      paths.add(new Path("/foo/bar"));
+      paths.add(new Path("/foo/baz"));
+      paths.add(new Path("/foo2/bar2"));
+      paths.add(new Path("/foo2/baz2"));
+      dfs.mkdir(new Path("/foo"), FsPermission.getDirDefault());
+      dfs.mkdir(new Path("/foo2"), FsPermission.getDirDefault());
+      final int numBlocksPerFile = 2;
+      for (Path path : paths) {
+        FileSystemTestHelper.createFile(dfs, path, numBlocksPerFile,
+            (int)BLOCK_SIZE, (short)3, false);
+      }
+      waitForCachedBlocks(namenode, 0, 0, "testReplicationFactor:0");
+      checkNumCachedReplicas(dfs, paths, 0, 0);
+      // cache directory
+      long id = dfs.addCacheDirective(
+          new CacheDirectiveInfo.Builder().
+            setPath(new Path("/foo")).
+            setReplication((short)1).
+            setPool(pool).
+            build());
+      waitForCachedBlocks(namenode, 4, 4, "testReplicationFactor:1");
+      checkNumCachedReplicas(dfs, paths, 4, 4);
+      // step up the replication factor
+      for (int i=2; i<=3; i++) {
+        dfs.modifyCacheDirective(
+            new CacheDirectiveInfo.Builder().
+            setId(id).
+            setReplication((short)i).
+            build());
+        waitForCachedBlocks(namenode, 4, 4*i, "testReplicationFactor:2");
+        checkNumCachedReplicas(dfs, paths, 4, 4*i);
+      }
+      // step it down
+      for (int i=2; i>=1; i--) {
+        dfs.modifyCacheDirective(
+            new CacheDirectiveInfo.Builder().
+            setId(id).
+            setReplication((short)i).
+            build());
+        waitForCachedBlocks(namenode, 4, 4*i, "testReplicationFactor:3");
+        checkNumCachedReplicas(dfs, paths, 4, 4*i);
+      }
+      // remove and watch numCached go to 0
+      dfs.removeCacheDirective(id);
+      waitForCachedBlocks(namenode, 0, 0, "testReplicationFactor:4");
+      checkNumCachedReplicas(dfs, paths, 0, 0);
+    } finally {
+      cluster.shutdown();
+    }
+  }
+
+  @Test(timeout=60000)
+  public void testListCachePoolPermissions() throws Exception {
+    final UserGroupInformation myUser = UserGroupInformation
+        .createRemoteUser("myuser");
+    final DistributedFileSystem myDfs = 
+        (DistributedFileSystem)DFSTestUtil.getFileSystemAs(myUser, conf);
+    final String poolName = "poolparty";
+    dfs.addCachePool(new CachePoolInfo(poolName)
+        .setMode(new FsPermission((short)0700)));
+    // Should only see partial info
+    RemoteIterator<CachePoolInfo> it = myDfs.listCachePools();
+    CachePoolInfo info = it.next();
+    assertFalse(it.hasNext());
+    assertEquals("Expected pool name", poolName, info.getPoolName());
+    assertNull("Unexpected owner name", info.getOwnerName());
+    assertNull("Unexpected group name", info.getGroupName());
+    assertNull("Unexpected mode", info.getMode());
+    assertNull("Unexpected weight", info.getWeight());
+    // Modify the pool so myuser is now the owner
+    dfs.modifyCachePool(new CachePoolInfo(poolName)
+        .setOwnerName(myUser.getShortUserName())
+        .setWeight(99));
+    // Should see full info
+    it = myDfs.listCachePools();
+    info = it.next();
+    assertFalse(it.hasNext());
+    assertEquals("Expected pool name", poolName, info.getPoolName());
+    assertEquals("Mismatched owner name", myUser.getShortUserName(),
+        info.getOwnerName());
+    assertNotNull("Expected group name", info.getGroupName());
+    assertEquals("Mismatched mode", (short) 0700,
+        info.getMode().toShort());
+    assertEquals("Mismatched weight", 99, (int)info.getWeight());
+  }
 }

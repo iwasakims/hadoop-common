@@ -17,17 +17,24 @@
  */
 package org.apache.hadoop.hdfs.server.datanode;
 
+import static org.apache.hadoop.test.MetricsAsserts.getMetrics;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assume.assumeTrue;
 import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyLong;
 import static org.mockito.Matchers.anyInt;
+import static org.mockito.Matchers.anyLong;
 import static org.mockito.Mockito.doReturn;
 
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.util.HashSet;
+import java.util.Set;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.HdfsBlockLocation;
@@ -42,6 +49,9 @@ import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocolPB.DatanodeProtocolClientSideTranslatorPB;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsDatasetSpi;
+import org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.FsDatasetCache.PageRounder;
+import org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.MappableBlock;
+import org.apache.hadoop.hdfs.server.namenode.EditLogFileOutputStream;
 import org.apache.hadoop.hdfs.server.namenode.FSImage;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.hdfs.server.protocol.BlockIdCommand;
@@ -52,12 +62,21 @@ import org.apache.hadoop.hdfs.server.protocol.HeartbeatResponse;
 import org.apache.hadoop.hdfs.server.protocol.NNHAStatusHeartbeat;
 import org.apache.hadoop.hdfs.server.protocol.StorageReport;
 import org.apache.hadoop.io.nativeio.NativeIO;
+import org.apache.hadoop.io.nativeio.NativeIO.POSIX.CacheManipulator;
+import org.apache.hadoop.io.nativeio.NativeIO.POSIX.NoMlockCacheManipulator;
+import org.apache.hadoop.metrics2.MetricsRecordBuilder;
+import org.apache.hadoop.test.GenericTestUtils;
+import org.apache.hadoop.test.MetricsAsserts;
 import org.apache.log4j.Logger;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.google.common.base.Supplier;
+
 public class TestFsDatasetCache {
+  private static final Log LOG = LogFactory.getLog(TestFsDatasetCache.class);
 
   // Most Linux installs allow a default of 64KB locked memory
   private static final long CACHE_CAPACITY = 64 * 1024;
@@ -71,16 +90,25 @@ public class TestFsDatasetCache {
   private static DataNode dn;
   private static FsDatasetSpi<?> fsd;
   private static DatanodeProtocolClientSideTranslatorPB spyNN;
+  private static PageRounder rounder = new PageRounder();
+  private static CacheManipulator prevCacheManipulator;
+
+  static {
+    EditLogFileOutputStream.setShouldSkipFsyncForTesting(false);
+  }
 
   @Before
   public void setUp() throws Exception {
     assumeTrue(!Path.WINDOWS);
-    assumeTrue(NativeIO.isAvailable());
     conf = new HdfsConfiguration();
+    conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_CACHING_ENABLED_KEY, true);
+    conf.setLong(DFSConfigKeys.DFS_NAMENODE_PATH_BASED_CACHE_RETRY_INTERVAL_MS,
+        500);
     conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, BLOCK_SIZE);
     conf.setLong(DFSConfigKeys.DFS_DATANODE_MAX_LOCKED_MEMORY_KEY,
         CACHE_CAPACITY);
     conf.setLong(DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY, 1);
+    conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_CACHING_ENABLED_KEY, true);
 
     cluster = new MiniDFSCluster.Builder(conf)
         .numDataNodes(1).build();
@@ -93,6 +121,9 @@ public class TestFsDatasetCache {
     fsd = dn.getFSDataset();
 
     spyNN = DataNodeTestUtils.spyOnBposToNN(dn, nn);
+
+    prevCacheManipulator = NativeIO.POSIX.getCacheManipulator();
+    NativeIO.POSIX.setCacheManipulator(new NoMlockCacheManipulator());
   }
 
   @After
@@ -103,6 +134,8 @@ public class TestFsDatasetCache {
     if (cluster != null) {
       cluster.shutdown();
     }
+    // Restore the original CacheManipulator
+    NativeIO.POSIX.setCacheManipulator(prevCacheManipulator);
   }
 
   private static void setHeartbeatResponse(DatanodeCommand[] cmds)
@@ -169,18 +202,33 @@ public class TestFsDatasetCache {
    * Blocks until cache usage hits the expected new value.
    */
   private long verifyExpectedCacheUsage(final long expected) throws Exception {
-    long cacheUsed = fsd.getDnCacheUsed();
-    while (cacheUsed != expected) {
-      cacheUsed = fsd.getDnCacheUsed();
-      Thread.sleep(100);
-    }
-    assertEquals("Unexpected amount of cache used", expected, cacheUsed);
-    return cacheUsed;
+    GenericTestUtils.waitFor(new Supplier<Boolean>() {
+      private int tries = 0;
+      
+      @Override
+      public Boolean get() {
+        long curDnCacheUsed = fsd.getCacheUsed();
+        if (curDnCacheUsed != expected) {
+          if (tries++ > 10) {
+            LOG.info("verifyExpectedCacheUsage: expected " +
+                expected + ", got " + curDnCacheUsed + "; " +
+                "memlock limit = " +
+                NativeIO.POSIX.getCacheManipulator().getMemlockLimit() +
+                ".  Waiting...");
+          }
+          return false;
+        }
+        return true;
+      }
+    }, 100, 60000);
+    return expected;
   }
 
-  @Test(timeout=60000)
-  public void testCacheAndUncacheBlock() throws Exception {
+  private void testCacheAndUncacheBlock() throws Exception {
+    LOG.info("beginning testCacheAndUncacheBlock");
     final int NUM_BLOCKS = 5;
+
+    verifyExpectedCacheUsage(0);
 
     // Write a test file
     final Path testFile = new Path("/testCacheBlock");
@@ -194,32 +242,82 @@ public class TestFsDatasetCache {
     final long[] blockSizes = getBlockSizes(locs);
 
     // Check initial state
-    final long cacheCapacity = fsd.getDnCacheCapacity();
-    long cacheUsed = fsd.getDnCacheUsed();
+    final long cacheCapacity = fsd.getCacheCapacity();
+    long cacheUsed = fsd.getCacheUsed();
     long current = 0;
     assertEquals("Unexpected cache capacity", CACHE_CAPACITY, cacheCapacity);
     assertEquals("Unexpected amount of cache used", current, cacheUsed);
+
+    MetricsRecordBuilder dnMetrics;
+    long numCacheCommands = 0;
+    long numUncacheCommands = 0;
 
     // Cache each block in succession, checking each time
     for (int i=0; i<NUM_BLOCKS; i++) {
       setHeartbeatResponse(cacheBlock(locs[i]));
       current = verifyExpectedCacheUsage(current + blockSizes[i]);
+      dnMetrics = getMetrics(dn.getMetrics().name());
+      long cmds = MetricsAsserts.getLongCounter("BlocksCached", dnMetrics);
+      assertTrue("Expected more cache requests from the NN ("
+          + cmds + " <= " + numCacheCommands + ")",
+           cmds > numCacheCommands);
+      numCacheCommands = cmds;
     }
 
     // Uncache each block in succession, again checking each time
     for (int i=0; i<NUM_BLOCKS; i++) {
       setHeartbeatResponse(uncacheBlock(locs[i]));
       current = verifyExpectedCacheUsage(current - blockSizes[i]);
+      dnMetrics = getMetrics(dn.getMetrics().name());
+      long cmds = MetricsAsserts.getLongCounter("BlocksUncached", dnMetrics);
+      assertTrue("Expected more uncache requests from the NN",
+           cmds > numUncacheCommands);
+      numUncacheCommands = cmds;
     }
+    LOG.info("finishing testCacheAndUncacheBlock");
   }
 
-  @Test(timeout=60000)
+  @Test(timeout=600000)
+  public void testCacheAndUncacheBlockSimple() throws Exception {
+    testCacheAndUncacheBlock();
+  }
+
+  /**
+   * Run testCacheAndUncacheBlock with some failures injected into the mlock
+   * call.  This tests the ability of the NameNode to resend commands.
+   */
+  @Test(timeout=600000)
+  public void testCacheAndUncacheBlockWithRetries() throws Exception {
+    // We don't have to save the previous cacheManipulator
+    // because it will be reinstalled by the @After function.
+    NativeIO.POSIX.setCacheManipulator(new NoMlockCacheManipulator() {
+      private final Set<String> seenIdentifiers = new HashSet<String>();
+      
+      @Override
+      public void mlock(String identifier,
+          ByteBuffer mmap, long length) throws IOException {
+        if (seenIdentifiers.contains(identifier)) {
+          // mlock succeeds the second time.
+          LOG.info("mlocking " + identifier);
+          return;
+        }
+        seenIdentifiers.add(identifier);
+        throw new IOException("injecting IOException during mlock of " +
+            identifier);
+      }
+    });
+    testCacheAndUncacheBlock();
+  }
+
+  @Test(timeout=600000)
   public void testFilesExceedMaxLockedMemory() throws Exception {
+    LOG.info("beginning testFilesExceedMaxLockedMemory");
+
     // Create some test files that will exceed total cache capacity
-    // Don't forget that meta files take up space too!
-    final int numFiles = 4;
-    final long fileSize = CACHE_CAPACITY / numFiles;
-    final Path[] testFiles = new Path[4];
+    final int numFiles = 5;
+    final long fileSize = 15000;
+
+    final Path[] testFiles = new Path[numFiles];
     final HdfsBlockLocation[][] fileLocs = new HdfsBlockLocation[numFiles][];
     final long[] fileSizes = new long[numFiles];
     for (int i=0; i<numFiles; i++) {
@@ -235,35 +333,111 @@ public class TestFsDatasetCache {
     }
 
     // Cache the first n-1 files
-    long current = 0;
+    long total = 0;
+    verifyExpectedCacheUsage(0);
     for (int i=0; i<numFiles-1; i++) {
       setHeartbeatResponse(cacheBlocks(fileLocs[i]));
-      current = verifyExpectedCacheUsage(current + fileSizes[i]);
+      total = verifyExpectedCacheUsage(rounder.round(total + fileSizes[i]));
     }
-    final long oldCurrent = current;
 
     // nth file should hit a capacity exception
     final LogVerificationAppender appender = new LogVerificationAppender();
     final Logger logger = Logger.getRootLogger();
     logger.addAppender(appender);
     setHeartbeatResponse(cacheBlocks(fileLocs[numFiles-1]));
-    int lines = 0;
-    while (lines == 0) {
-      Thread.sleep(100);
-      lines = appender.countLinesWithMessage(
-          DFSConfigKeys.DFS_DATANODE_MAX_LOCKED_MEMORY_KEY + " exceeded");
-    }
 
-    // Uncache the cached part of the nth file
-    setHeartbeatResponse(uncacheBlocks(fileLocs[numFiles-1]));
-    while (fsd.getDnCacheUsed() != oldCurrent) {
-      Thread.sleep(100);
-    }
+    GenericTestUtils.waitFor(new Supplier<Boolean>() {
+      @Override
+      public Boolean get() {
+        int lines = appender.countLinesWithMessage(
+            "more bytes in the cache: " +
+            DFSConfigKeys.DFS_DATANODE_MAX_LOCKED_MEMORY_KEY);
+        return lines > 0;
+      }
+    }, 500, 30000);
+    // Also check the metrics for the failure
+    assertTrue("Expected more than 0 failed cache attempts",
+        fsd.getNumBlocksFailedToCache() > 0);
 
     // Uncache the n-1 files
     for (int i=0; i<numFiles-1; i++) {
       setHeartbeatResponse(uncacheBlocks(fileLocs[i]));
-      current = verifyExpectedCacheUsage(current - fileSizes[i]);
+      total -= rounder.round(fileSizes[i]);
+      verifyExpectedCacheUsage(total);
     }
+    LOG.info("finishing testFilesExceedMaxLockedMemory");
+  }
+
+  @Test(timeout=600000)
+  public void testUncachingBlocksBeforeCachingFinishes() throws Exception {
+    LOG.info("beginning testUncachingBlocksBeforeCachingFinishes");
+    final int NUM_BLOCKS = 5;
+
+    verifyExpectedCacheUsage(0);
+
+    // Write a test file
+    final Path testFile = new Path("/testCacheBlock");
+    final long testFileLen = BLOCK_SIZE*NUM_BLOCKS;
+    DFSTestUtil.createFile(fs, testFile, testFileLen, (short)1, 0xABBAl);
+
+    // Get the details of the written file
+    HdfsBlockLocation[] locs =
+        (HdfsBlockLocation[])fs.getFileBlockLocations(testFile, 0, testFileLen);
+    assertEquals("Unexpected number of blocks", NUM_BLOCKS, locs.length);
+    final long[] blockSizes = getBlockSizes(locs);
+
+    // Check initial state
+    final long cacheCapacity = fsd.getCacheCapacity();
+    long cacheUsed = fsd.getCacheUsed();
+    long current = 0;
+    assertEquals("Unexpected cache capacity", CACHE_CAPACITY, cacheCapacity);
+    assertEquals("Unexpected amount of cache used", current, cacheUsed);
+
+    NativeIO.POSIX.setCacheManipulator(new NoMlockCacheManipulator() {
+      @Override
+      public void mlock(String identifier,
+          ByteBuffer mmap, long length) throws IOException {
+        LOG.info("An mlock operation is starting on " + identifier);
+        try {
+          Thread.sleep(3000);
+        } catch (InterruptedException e) {
+          Assert.fail();
+        }
+      }
+    });
+    // Starting caching each block in succession.  The usedBytes amount
+    // should increase, even though caching doesn't complete on any of them.
+    for (int i=0; i<NUM_BLOCKS; i++) {
+      setHeartbeatResponse(cacheBlock(locs[i]));
+      current = verifyExpectedCacheUsage(current + blockSizes[i]);
+    }
+    
+    setHeartbeatResponse(new DatanodeCommand[] {
+      getResponse(locs, DatanodeProtocol.DNA_UNCACHE)
+    });
+
+    // wait until all caching jobs are finished cancelling.
+    current = verifyExpectedCacheUsage(0);
+    LOG.info("finishing testUncachingBlocksBeforeCachingFinishes");
+  }
+
+  @Test(timeout=60000)
+  public void testUncacheUnknownBlock() throws Exception {
+    // Create a file
+    Path fileName = new Path("/testUncacheUnknownBlock");
+    int fileLen = 4096;
+    DFSTestUtil.createFile(fs, fileName, fileLen, (short)1, 0xFDFD);
+    HdfsBlockLocation[] locs = (HdfsBlockLocation[])fs.getFileBlockLocations(
+        fileName, 0, fileLen);
+
+    // Try to uncache it without caching it first
+    setHeartbeatResponse(uncacheBlocks(locs));
+
+    GenericTestUtils.waitFor(new Supplier<Boolean>() {
+      @Override
+      public Boolean get() {
+        return fsd.getNumBlocksFailedToUncache() > 0;
+      }
+    }, 100, 10000);
   }
 }

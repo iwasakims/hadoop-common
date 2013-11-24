@@ -108,6 +108,7 @@ import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hdfs.client.ClientMmapManager;
 import org.apache.hadoop.hdfs.client.HdfsDataInputStream;
 import org.apache.hadoop.hdfs.client.HdfsDataOutputStream;
+import org.apache.hadoop.hdfs.protocol.CacheDirectiveEntry;
 import org.apache.hadoop.hdfs.protocol.CachePoolInfo;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
 import org.apache.hadoop.hdfs.protocol.CorruptFileBlocks;
@@ -117,8 +118,7 @@ import org.apache.hadoop.hdfs.protocol.DirectoryListing;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.HdfsBlocksMetadata;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
-import org.apache.hadoop.hdfs.protocol.PathBasedCacheDescriptor;
-import org.apache.hadoop.hdfs.protocol.PathBasedCacheDirective;
+import org.apache.hadoop.hdfs.protocol.CacheDirectiveInfo;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.DatanodeReportType;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.SafeModeAction;
 import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
@@ -2295,31 +2295,41 @@ public class DFSClient implements java.io.Closeable {
     }
   }
 
-  public PathBasedCacheDescriptor addPathBasedCacheDirective(
-      PathBasedCacheDirective directive) throws IOException {
+  public long addCacheDirective(
+      CacheDirectiveInfo info) throws IOException {
     checkOpen();
     try {
-      return namenode.addPathBasedCacheDirective(directive);
+      return namenode.addCacheDirective(info);
     } catch (RemoteException re) {
       throw re.unwrapRemoteException();
     }
   }
   
-  public void removePathBasedCacheDescriptor(long id)
+  public void modifyCacheDirective(
+      CacheDirectiveInfo info) throws IOException {
+    checkOpen();
+    try {
+      namenode.modifyCacheDirective(info);
+    } catch (RemoteException re) {
+      throw re.unwrapRemoteException();
+    }
+  }
+
+  public void removeCacheDirective(long id)
       throws IOException {
     checkOpen();
     try {
-      namenode.removePathBasedCacheDescriptor(id);
+      namenode.removeCacheDirective(id);
     } catch (RemoteException re) {
       throw re.unwrapRemoteException();
     }
   }
   
-  public RemoteIterator<PathBasedCacheDescriptor> listPathBasedCacheDescriptors(
-      String pool, String path) throws IOException {
+  public RemoteIterator<CacheDirectiveEntry> listCacheDirectives(
+      CacheDirectiveInfo filter) throws IOException {
     checkOpen();
     try {
-      return namenode.listPathBasedCacheDescriptors(0, pool, path);
+      return namenode.listCacheDirectives(0, filter);
     } catch (RemoteException re) {
       throw re.unwrapRemoteException();
     }
@@ -2386,6 +2396,11 @@ public class DFSClient implements java.io.Closeable {
     } catch(RemoteException re) {
       throw re.unwrapRemoteException(AccessControlException.class);
     }
+  }
+
+  @VisibleForTesting
+  ExtendedBlock getPreviousBlock(String file) {
+    return filesBeingWritten.get(file).getBlock();
   }
   
   /**

@@ -32,14 +32,17 @@ import org.apache.commons.cli.GnuParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -162,6 +165,10 @@ public class Client {
   // Command line options
   private Options opts;
 
+  private final String shellCommandPath = "shellCommands";
+  // Hardcoded path to custom log_properties
+  private final String log4jPath = "log4j.properties";
+
   /**
    * @param args Command line arguments 
    */
@@ -253,7 +260,16 @@ public class Client {
 
     if (args.length == 0) {
       throw new IllegalArgumentException("No args specified for client to initialize");
-    }		
+    }
+
+    if (cliParser.hasOption("log_properties")) {
+      String log4jPath = cliParser.getOptionValue("log_properties");
+      try {
+        Log4jPropertyHelper.updateLog4jConfiguration(Client.class, log4jPath);
+      } catch (Exception e) {
+        LOG.warn("Can not set up custom log4j properties. " + e);
+      }
+    }
 
     if (cliParser.hasOption("help")) {
       printUsage();
@@ -451,16 +467,16 @@ public class Client {
     // Set the log4j properties if needed 
     if (!log4jPropFile.isEmpty()) {
       Path log4jSrc = new Path(log4jPropFile);
-      Path log4jDst = new Path(fs.getHomeDirectory(), "log4j.props");
+      String log4jPathSuffix = appName + "/" + appId.getId() + "/" + log4jPath;
+      Path log4jDst = new Path(fs.getHomeDirectory(), log4jPathSuffix);
       fs.copyFromLocalFile(false, true, log4jSrc, log4jDst);
       FileStatus log4jFileStatus = fs.getFileStatus(log4jDst);
-      LocalResource log4jRsrc = Records.newRecord(LocalResource.class);
-      log4jRsrc.setType(LocalResourceType.FILE);
-      log4jRsrc.setVisibility(LocalResourceVisibility.APPLICATION);	   
-      log4jRsrc.setResource(ConverterUtils.getYarnUrlFromURI(log4jDst.toUri()));
-      log4jRsrc.setTimestamp(log4jFileStatus.getModificationTime());
-      log4jRsrc.setSize(log4jFileStatus.getLen());
-      localResources.put("log4j.properties", log4jRsrc);
+      LocalResource log4jRsrc =
+          LocalResource.newInstance(
+              ConverterUtils.getYarnUrlFromURI(log4jDst.toUri()),
+              LocalResourceType.FILE, LocalResourceVisibility.APPLICATION,
+              log4jFileStatus.getLen(), log4jFileStatus.getModificationTime());
+      localResources.put(log4jPath, log4jRsrc);
     }			
 
     // The shell script has to be made available on the final container(s)
@@ -483,6 +499,27 @@ public class Client {
       hdfsShellScriptTimestamp = shellFileStatus.getModificationTime();
     }
 
+    if (!shellCommand.isEmpty()) {
+      String shellCommandSuffix =
+          appName + "/" + appId.getId() + "/" + shellCommandPath;
+      Path shellCommandDst =
+          new Path(fs.getHomeDirectory(), shellCommandSuffix);
+      FSDataOutputStream ostream = null;
+      try {
+        ostream = FileSystem
+            .create(fs, shellCommandDst, new FsPermission((short) 0710));
+        ostream.writeUTF(shellCommand);
+      } finally {
+        IOUtils.closeQuietly(ostream);
+      }
+      FileStatus scFileStatus = fs.getFileStatus(shellCommandDst);
+      LocalResource scRsrc =
+          LocalResource.newInstance(
+              ConverterUtils.getYarnUrlFromURI(shellCommandDst.toUri()),
+              LocalResourceType.FILE, LocalResourceVisibility.APPLICATION,
+              scFileStatus.getLen(), scFileStatus.getModificationTime());
+      localResources.put(shellCommandPath, scRsrc);
+    }
     // Set local resource info into app master container launch context
     amContainer.setLocalResources(localResources);
 
@@ -541,9 +578,7 @@ public class Client {
     vargs.add("--container_vcores " + String.valueOf(containerVirtualCores));
     vargs.add("--num_containers " + String.valueOf(numContainers));
     vargs.add("--priority " + String.valueOf(shellCmdPriority));
-    if (!shellCommand.isEmpty()) {
-      vargs.add("--shell_command " + shellCommand + "");
-    }
+
     if (!shellArgs.isEmpty()) {
       vargs.add("--shell_args " + shellArgs + "");
     }

@@ -156,15 +156,14 @@ public class DFSOutputStream extends FSOutputSummer
   private boolean shouldSyncBlock = false; // force blocks to disk upon close
   private CachingStrategy cachingStrategy;
   private Span traceSpan = null;
-
-    private static class Packet {
-      private static final long HEART_BEAT_SEQNO = -1L;
-      long seqno; // sequencenumber of buffer in block
-      final long offsetInBlock; // offset in block
-      boolean syncBlock; // this packet forces the current block to disk
-      int numChunks; // number of chunks currently in packet
-      final int maxChunks; // max chunks in packet
-
+  
+  private static class Packet {
+    private static final long HEART_BEAT_SEQNO = -1L;
+    long seqno; // sequencenumber of buffer in block
+    final long offsetInBlock; // offset in block
+    boolean syncBlock; // this packet forces the current block to disk
+    int numChunks; // number of chunks currently in packet
+    final int maxChunks; // max chunks in packet
     byte[]  buf;
     private boolean lastPacketInBlock; // is this the last packet in block?
 
@@ -749,6 +748,16 @@ public class DFSOutputStream extends FSOutputSummer
                                     one.seqno + " but received " + seqno);
             }
             isLastPacketInBlock = one.lastPacketInBlock;
+
+            // Fail the packet write for testing in order to force a
+            // pipeline recovery.
+            if (DFSClientFaultInjector.get().failPacket() &&
+                isLastPacketInBlock) {
+              failPacket = true;
+              throw new IOException(
+                    "Failing the last packet for testing.");
+            }
+              
             // update bytesAcked
             block.setNumBytes(one.getLastByteOffsetBlock());
 
@@ -1033,7 +1042,18 @@ public class DFSOutputStream extends FSOutputSummer
         accessToken = lb.getBlockToken();
         
         // set up the pipeline again with the remaining nodes
-        success = createBlockOutputStream(nodes, newGS, isRecovery);
+        if (failPacket) { // for testing
+          success = createBlockOutputStream(nodes, newGS-1, isRecovery);
+          failPacket = false;
+          try {
+            // Give DNs time to send in bad reports. In real situations,
+            // good reports should follow bad ones, if client committed
+            // with those nodes.
+            Thread.sleep(2000);
+          } catch (InterruptedException ie) {}
+        } else {
+          success = createBlockOutputStream(nodes, newGS, isRecovery);
+        }
       }
 
       if (success) {
@@ -1750,8 +1770,9 @@ public class DFSOutputStream extends FSOutputSummer
       } // end synchronized
 
       waitForAckedSeqno(toWaitFor);
-      
-      if (updateLength) {
+
+      // update the block length first time irrespective of flag
+      if (updateLength || persistBlocks.get()) {
         synchronized (this) {
           if (streamer != null && streamer.block != null) {
             lastBlockLength = streamer.block.getNumBytes();
@@ -1959,7 +1980,9 @@ public class DFSOutputStream extends FSOutputSummer
   // be called during unit tests
   private void completeFile(ExtendedBlock last) throws IOException {
     long localstart = Time.now();
+    long localTimeout = 400;
     boolean fileComplete = false;
+    int retries = dfsClient.getConf().nBlockWriteLocateFollowingRetry;
     while (!fileComplete) {
       fileComplete =
           dfsClient.namenode.complete(src, dfsClient.clientName, last, fileId);
@@ -1975,7 +1998,13 @@ public class DFSOutputStream extends FSOutputSummer
             throw new IOException(msg);
         }
         try {
-          Thread.sleep(400);
+          Thread.sleep(localTimeout);
+          if (retries == 0) {
+            throw new IOException("Unable to close file because the last block"
+                + " does not have enough number of replicas.");
+          }
+          retries--;
+          localTimeout *= 2;
           if (Time.now() - localstart > 5000) {
             DFSClient.LOG.info("Could not complete " + src + " retrying...");
           }
@@ -2019,5 +2048,15 @@ public class DFSOutputStream extends FSOutputSummer
   @Override
   public void setDropBehind(Boolean dropBehind) throws IOException {
     this.cachingStrategy.setDropBehind(dropBehind);
+  }
+
+  @VisibleForTesting
+  ExtendedBlock getBlock() {
+    return streamer.getBlock();
+  }
+
+  @VisibleForTesting
+  long getFileId() {
+    return fileId;
   }
 }

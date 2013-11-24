@@ -85,6 +85,7 @@ import org.mortbay.jetty.webapp.WebAppContext;
 import org.mortbay.thread.QueuedThreadPool;
 import org.mortbay.util.MultiException;
 
+import com.google.common.base.Preconditions;
 import com.sun.jersey.spi.container.servlet.ServletContainer;
 
 /**
@@ -471,7 +472,9 @@ public class HttpServer implements FilterContainer {
       if (conf.getBoolean(
           CommonConfigurationKeys.HADOOP_JETTY_LOGS_SERVE_ALIASES,
           CommonConfigurationKeys.DEFAULT_HADOOP_JETTY_LOGS_SERVE_ALIASES)) {
-        logContext.getInitParams().put(
+        @SuppressWarnings("unchecked")
+        Map<String, String> params = logContext.getInitParams();
+        params.put(
             "org.mortbay.jetty.servlet.Default.aliases", "true");
       }
       logContext.setDisplayName("logs");
@@ -714,6 +717,19 @@ public class HttpServer implements FilterContainer {
    */
   public int getPort() {
     return webServer.getConnectors()[0].getLocalPort();
+  }
+
+  /**
+   * Get the port that corresponds to a particular connector. In the case of
+   * HDFS, the second connector corresponds to the HTTPS connector.
+   *
+   * @return the corresponding port for the connector, or -1 if there's no such
+   *         connector.
+   */
+  public int getConnectorPort(int index) {
+    Preconditions.checkArgument(index >= 0);
+    return index < webServer.getConnectors().length ?
+        webServer.getConnectors()[index].getLocalPort() : -1;
   }
 
   /**

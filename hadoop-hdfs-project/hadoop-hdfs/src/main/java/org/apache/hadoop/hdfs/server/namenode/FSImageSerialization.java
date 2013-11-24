@@ -108,7 +108,7 @@ public class FSImageSerialization {
   // Helper function that reads in an INodeUnderConstruction
   // from the input stream
   //
-  static INodeFileUnderConstruction readINodeUnderConstruction(
+  static INodeFile readINodeUnderConstruction(
       DataInput in, FSNamesystem fsNamesys, int imgVersion)
       throws IOException {
     byte[] name = readBytes(in);
@@ -141,25 +141,17 @@ public class FSImageSerialization {
     int numLocs = in.readInt();
     assert numLocs == 0 : "Unexpected block locations";
 
-    return new INodeFileUnderConstruction(inodeId,
-                                          name,
-                                          blockReplication, 
-                                          modificationTime,
-                                          preferredBlockSize,
-                                          blocks,
-                                          perm,
-                                          clientName,
-                                          clientMachine,
-                                          null);
+    INodeFile file = new INodeFile(inodeId, name, perm, modificationTime,
+        modificationTime, blocks, blockReplication, preferredBlockSize);
+    file.toUnderConstruction(clientName, clientMachine, null);
+    return file;
   }
 
   // Helper function that writes an INodeUnderConstruction
   // into the input stream
   //
-  static void writeINodeUnderConstruction(DataOutputStream out,
-                                           INodeFileUnderConstruction cons,
-                                           String path) 
-                                           throws IOException {
+  static void writeINodeUnderConstruction(DataOutputStream out, INodeFile cons,
+      String path) throws IOException {
     writeString(path, out);
     out.writeLong(cons.getId());
     out.writeShort(cons.getFileReplication());
@@ -169,8 +161,9 @@ public class FSImageSerialization {
     writeBlocks(cons.getBlocks(), out);
     cons.getPermissionStatus().write(out);
 
-    writeString(cons.getClientName(), out);
-    writeString(cons.getClientMachine(), out);
+    FileUnderConstructionFeature uc = cons.getFileUnderConstructionFeature();
+    writeString(uc.getClientName(), out);
+    writeString(uc.getClientMachine(), out);
 
     out.writeInt(0); //  do not store locations of last block
   }
@@ -194,9 +187,9 @@ public class FSImageSerialization {
     SnapshotFSImageFormat.saveFileDiffList(file, out);
 
     if (writeUnderConstruction) {
-      if (file instanceof INodeFileUnderConstruction) {
+      if (file.isUnderConstruction()) {
         out.writeBoolean(true);
-        final INodeFileUnderConstruction uc = (INodeFileUnderConstruction)file;
+        final FileUnderConstructionFeature uc = file.getFileUnderConstructionFeature();
         writeString(uc.getClientName(), out);
         writeString(uc.getClientMachine(), out);
       } else {
@@ -219,6 +212,12 @@ public class FSImageSerialization {
     out.writeLong(file.getPreferredBlockSize());
   }
 
+  private static void writeQuota(Quota.Counts quota, DataOutput out)
+      throws IOException {
+    out.writeLong(quota.get(Quota.NAMESPACE));
+    out.writeLong(quota.get(Quota.DISKSPACE));
+  }
+
   /**
    * Serialize a {@link INodeDirectory}
    * @param node The node to write
@@ -234,8 +233,8 @@ public class FSImageSerialization {
     out.writeLong(0);   // preferred block size
     out.writeInt(-1);   // # of blocks
 
-    out.writeLong(node.getNsQuota());
-    out.writeLong(node.getDsQuota());
+    writeQuota(node.getQuotaCounts(), out);
+
     if (node instanceof INodeDirectorySnapshottable) {
       out.writeBoolean(true);
     } else {
@@ -256,9 +255,7 @@ public class FSImageSerialization {
     writeLocalName(a, out);
     writePermissionStatus(a, out);
     out.writeLong(a.getModificationTime());
-
-    out.writeLong(a.getNsQuota());
-    out.writeLong(a.getDsQuota());
+    writeQuota(a.getQuotaCounts(), out);
   }
 
   /**

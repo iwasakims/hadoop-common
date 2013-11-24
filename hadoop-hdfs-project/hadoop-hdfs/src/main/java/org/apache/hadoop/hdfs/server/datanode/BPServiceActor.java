@@ -29,6 +29,7 @@ import java.util.Map;
 
 import org.apache.commons.logging.Log;
 import org.apache.hadoop.classification.InterfaceAudience;
+import org.apache.hadoop.ha.HAServiceProtocol.HAServiceState;
 import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.protocol.BlockListAsLongs;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
@@ -73,6 +74,7 @@ class BPServiceActor implements Runnable {
   
   static final Log LOG = DataNode.LOG;
   final InetSocketAddress nnAddr;
+  HAServiceState state;
 
   BPOfferService bpos;
   
@@ -435,7 +437,7 @@ class BPServiceActor implements Runnable {
   
   DatanodeCommand cacheReport() throws IOException {
     // If caching is disabled, do not send a cache report
-    if (dn.getFSDataset().getDnCacheCapacity() == 0) {
+    if (dn.getFSDataset().getCacheCapacity() == 0) {
       return null;
     }
     // send cache report if timer has expired.
@@ -457,7 +459,7 @@ class BPServiceActor implements Runnable {
       long sendCost = sendTime - createTime;
       dn.getMetrics().addCacheReport(sendCost);
       LOG.info("CacheReport of " + blockIds.size()
-          + " blocks took " + createCost + " msec to generate and "
+          + " block(s) took " + createCost + " msec to generate and "
           + sendCost + " msecs for RPC and NN processing");
     }
     return cmd;
@@ -475,8 +477,8 @@ class BPServiceActor implements Runnable {
         dn.getFSDataset().getRemaining(),
         dn.getFSDataset().getBlockPoolUsed(bpos.getBlockPoolId())) };
     return bpNamenode.sendHeartbeat(bpRegistration, report,
-        dn.getFSDataset().getDnCacheCapacity(),
-        dn.getFSDataset().getDnCacheUsed(),
+        dn.getFSDataset().getCacheCapacity(),
+        dn.getFSDataset().getCacheUsed(),
         dn.getXmitsInProgress(),
         dn.getXceiverCount(),
         dn.getFSDataset().getNumFailedVolumes());
@@ -569,6 +571,7 @@ class BPServiceActor implements Runnable {
             // that we should actually process.
             bpos.updateActorStatesFromHeartbeat(
                 this, resp.getNameNodeHaState());
+            state = resp.getNameNodeHaState().getState();
 
             long startProcessCommands = now();
             if (!processCommand(resp.getCommands()))

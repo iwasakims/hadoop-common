@@ -32,6 +32,7 @@ import org.apache.hadoop.hdfs.protocol.QuotaExceededException;
 import org.apache.hadoop.hdfs.protocol.SnapshotDiffReport.DiffReportEntry;
 import org.apache.hadoop.hdfs.protocol.SnapshotDiffReport.DiffType;
 import org.apache.hadoop.hdfs.server.namenode.Content;
+import org.apache.hadoop.hdfs.server.namenode.ContentSummaryComputationContext;
 import org.apache.hadoop.hdfs.server.namenode.FSImageSerialization;
 import org.apache.hadoop.hdfs.server.namenode.INode;
 import org.apache.hadoop.hdfs.server.namenode.INodeDirectory;
@@ -74,7 +75,7 @@ public class INodeDirectoryWithSnapshot extends INodeDirectoryWithQuota {
         final INode oldChild, final INode newChild) {
       final List<INode> list = getList(type); 
       final int i = search(list, oldChild.getLocalNameBytes());
-      if (i < 0) {
+      if (i < 0 || list.get(i).getId() != oldChild.getId()) {
         return false;
       }
 
@@ -489,7 +490,7 @@ public class INodeDirectoryWithSnapshot extends INodeDirectoryWithQuota {
 
   INodeDirectoryWithSnapshot(INodeDirectory that, boolean adopt,
       DirectoryDiffList diffs) {
-    super(that, adopt, that.getNsQuota(), that.getDsQuota());
+    super(that, adopt, that.getQuotaCounts());
     this.diffs = diffs != null? diffs: new DirectoryDiffList();
   }
 
@@ -595,7 +596,15 @@ public class INodeDirectoryWithSnapshot extends INodeDirectoryWithQuota {
   public void replaceChild(final INode oldChild, final INode newChild,
       final INodeMap inodeMap) {
     super.replaceChild(oldChild, newChild, inodeMap);
-    diffs.replaceChild(ListType.CREATED, oldChild, newChild);
+    if (oldChild.getParentReference() != null && !newChild.isReference()) {
+      // oldChild is referred by a Reference node. Thus we are replacing the 
+      // referred inode, e.g., 
+      // INodeFileWithSnapshot -> INodeFileUnderConstructionWithSnapshot
+      // in this case, we do not need to update the diff list
+      return;
+    } else {
+      diffs.replaceChild(ListType.CREATED, oldChild, newChild);
+    }
   }
   
   /**
@@ -716,14 +725,8 @@ public class INodeDirectoryWithSnapshot extends INodeDirectoryWithQuota {
         if (priorDiff != null && priorDiff.getSnapshot().equals(prior)) {
           List<INode> cList = priorDiff.diff.getList(ListType.CREATED);
           List<INode> dList = priorDiff.diff.getList(ListType.DELETED);
-          priorCreated = new HashMap<INode, INode>(cList.size());
-          for (INode cNode : cList) {
-            priorCreated.put(cNode, cNode);
-          }
-          priorDeleted = new HashMap<INode, INode>(dList.size());
-          for (INode dNode : dList) {
-            priorDeleted.put(dNode, dNode);
-          }
+          priorCreated = cloneDiffList(cList);
+          priorDeleted = cloneDiffList(dList);
         }
       }
       
@@ -881,19 +884,39 @@ public class INodeDirectoryWithSnapshot extends INodeDirectoryWithQuota {
   }
 
   @Override
-  public Content.Counts computeContentSummary(final Content.Counts counts) {
-    super.computeContentSummary(counts);
-    computeContentSummary4Snapshot(counts);
-    return counts;
+  public ContentSummaryComputationContext computeContentSummary(
+      final ContentSummaryComputationContext summary) {
+    // Snapshot summary calc won't be relinquishing locks in the middle.
+    // Do this first and handover to parent.
+    computeContentSummary4Snapshot(summary.getCounts());
+    super.computeContentSummary(summary);
+    return summary;
   }
 
   private void computeContentSummary4Snapshot(final Content.Counts counts) {
+    // Create a new blank summary context for blocking processing of subtree.
+    ContentSummaryComputationContext summary = 
+        new ContentSummaryComputationContext();
     for(DirectoryDiff d : diffs) {
       for(INode deleted : d.getChildrenDiff().getList(ListType.DELETED)) {
-        deleted.computeContentSummary(counts);
+        deleted.computeContentSummary(summary);
       }
     }
+    // Add the counts from deleted trees.
+    counts.add(summary.getCounts());
+    // Add the deleted directory count.
     counts.add(Content.DIRECTORY, diffs.asList().size());
+  }
+  
+  private static Map<INode, INode> cloneDiffList(List<INode> diffList) {
+    if (diffList == null || diffList.size() == 0) {
+      return null;
+    }
+    Map<INode, INode> map = new HashMap<INode, INode>(diffList.size());
+    for (INode node : diffList) {
+      map.put(node, node);
+    }
+    return map;
   }
   
   /**
@@ -914,26 +937,28 @@ public class INodeDirectoryWithSnapshot extends INodeDirectoryWithQuota {
         destroyDstSubtree(inode.asReference().getReferredINode(), snapshot,
             prior, collectedBlocks, removedINodes);
       }
-    } else if (inode.isFile() && snapshot != null) {
+    } else if (inode.isFile()) {
       inode.cleanSubtree(snapshot, prior, collectedBlocks, removedINodes, true);
     } else if (inode.isDirectory()) {
       Map<INode, INode> excludedNodes = null;
       if (inode instanceof INodeDirectoryWithSnapshot) {
         INodeDirectoryWithSnapshot sdir = (INodeDirectoryWithSnapshot) inode;
+        
         DirectoryDiffList diffList = sdir.getDiffs();
+        DirectoryDiff priorDiff = diffList.getDiff(prior);
+        if (priorDiff != null && priorDiff.getSnapshot().equals(prior)) {
+          List<INode> dList = priorDiff.diff.getList(ListType.DELETED);
+          excludedNodes = cloneDiffList(dList);
+        }
+        
         if (snapshot != null) {
           diffList.deleteSnapshotDiff(snapshot, prior, sdir, collectedBlocks,
               removedINodes, true);
         }
-        DirectoryDiff priorDiff = diffList.getDiff(prior);
+        priorDiff = diffList.getDiff(prior);
         if (priorDiff != null && priorDiff.getSnapshot().equals(prior)) {
           priorDiff.diff.destroyCreatedList(sdir, collectedBlocks,
               removedINodes);
-          List<INode> dList = priorDiff.diff.getList(ListType.DELETED);
-          excludedNodes = new HashMap<INode, INode>(dList.size());
-          for (INode dNode : dList) {
-            excludedNodes.put(dNode, dNode);
-          }
         }
       }
       for (INode child : inode.asDirectory().getChildrenList(prior)) {

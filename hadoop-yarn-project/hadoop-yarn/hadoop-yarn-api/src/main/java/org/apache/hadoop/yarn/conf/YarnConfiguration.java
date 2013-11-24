@@ -20,6 +20,8 @@ package org.apache.hadoop.yarn.conf;
 
 import java.net.InetSocketAddress;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
 import org.apache.hadoop.classification.InterfaceAudience.Public;
 import org.apache.hadoop.classification.InterfaceStability.Evolving;
@@ -295,6 +297,17 @@ public class YarnConfiguration extends Configuration {
   public static final int DEFAULT_RM_HA_ADMIN_CLIENT_THREAD_COUNT = 1;
   // end @Private
 
+  public static final List<String> RM_RPC_ADDRESS_CONF_KEYS =
+      Collections.unmodifiableList(Arrays.asList(
+          RM_ADDRESS,
+          RM_SCHEDULER_ADDRESS,
+          RM_ADMIN_ADDRESS,
+          RM_RESOURCE_TRACKER_ADDRESS,
+          RM_WEBAPP_ADDRESS,
+          RM_WEBAPP_HTTPS_ADDRESS,
+          // TODO Remove after YARN-1318
+          RM_HA_ADMIN_ADDRESS));
+
   ////////////////////////////////
   // RM state store configs
   ////////////////////////////////
@@ -328,6 +341,8 @@ public class YarnConfiguration extends Configuration {
       ZK_STATE_STORE_PREFIX + "acl";
   public static final String DEFAULT_ZK_RM_STATE_STORE_ACL =
       "world:anyone:rwcda";
+  public static final String ZK_RM_STATE_STORE_ROOT_NODE_ACL =
+      ZK_STATE_STORE_PREFIX + "root-node.acl";
 
   /** The maximum number of completed applications RM keeps. */ 
   public static final String RM_MAX_COMPLETED_APPLICATIONS =
@@ -489,6 +504,11 @@ public class YarnConfiguration extends Configuration {
       RM_PREFIX + "delayed.delegation-token.removal-interval-ms";
   public static final long DEFAULT_RM_DELAYED_DELEGATION_TOKEN_REMOVAL_INTERVAL_MS =
       30000l;
+  
+  /** Delegation Token renewer thread count */
+  public static final String RM_DELEGATION_TOKEN_RENEWER_THREAD_COUNT =
+      RM_PREFIX + "delegation-token-renewer.thread-count";
+  public static final int DEFAULT_RM_DELEGATION_TOKEN_RENEWER_THREAD_COUNT = 50;
 
   /** Whether to enable log aggregation */
   public static final String LOG_AGGREGATION_ENABLED = YARN_PREFIX
@@ -922,7 +942,7 @@ public class YarnConfiguration extends Configuration {
   public InetSocketAddress getSocketAddr(
       String name, String defaultAddress, int defaultPort) {
     String address;
-    if (HAUtil.isHAEnabled(this)) {
+    if (HAUtil.isHAEnabled(this) && RM_RPC_ADDRESS_CONF_KEYS.contains(name)) {
       address = HAUtil.getConfValueForRMInstance(name, defaultAddress, this);
     } else {
       address = get(name, defaultAddress);

@@ -371,23 +371,34 @@ public abstract class INode implements INodeAttributes, Diff.Element<byte[]> {
   public abstract void destroyAndCollectBlocks(
       BlocksMapUpdateInfo collectedBlocks, List<INode> removedINodes);
 
-  /** Compute {@link ContentSummary}. */
+  /** Compute {@link ContentSummary}. Blocking call */
   public final ContentSummary computeContentSummary() {
-    final Content.Counts counts = computeContentSummary(
-        Content.Counts.newInstance());
+    return computeAndConvertContentSummary(
+        new ContentSummaryComputationContext());
+  }
+
+  /**
+   * Compute {@link ContentSummary}. 
+   */
+  public final ContentSummary computeAndConvertContentSummary(
+      ContentSummaryComputationContext summary) {
+    Content.Counts counts = computeContentSummary(summary).getCounts();
+    final Quota.Counts q = getQuotaCounts();
     return new ContentSummary(counts.get(Content.LENGTH),
         counts.get(Content.FILE) + counts.get(Content.SYMLINK),
-        counts.get(Content.DIRECTORY), getNsQuota(),
-        counts.get(Content.DISKSPACE), getDsQuota());
+        counts.get(Content.DIRECTORY), q.get(Quota.NAMESPACE),
+        counts.get(Content.DISKSPACE), q.get(Quota.DISKSPACE));
   }
 
   /**
    * Count subtree content summary with a {@link Content.Counts}.
    *
-   * @param counts The subtree counts for returning.
-   * @return The same objects as the counts parameter.
+   * @param summary the context object holding counts for the subtree.
+   * @return The same objects as summary.
    */
-  public abstract Content.Counts computeContentSummary(Content.Counts counts);
+  public abstract ContentSummaryComputationContext computeContentSummary(
+      ContentSummaryComputationContext summary);
+
   
   /**
    * Check and add namespace/diskspace consumed to itself and the ancestors.
@@ -402,18 +413,15 @@ public abstract class INode implements INodeAttributes, Diff.Element<byte[]> {
 
   /**
    * Get the quota set for this inode
-   * @return the quota if it is set; -1 otherwise
+   * @return the quota counts.  The count is -1 if it is not set.
    */
-  public long getNsQuota() {
-    return -1;
-  }
-
-  public long getDsQuota() {
-    return -1;
+  public Quota.Counts getQuotaCounts() {
+    return Quota.Counts.newInstance(-1, -1);
   }
   
   public final boolean isQuotaSet() {
-    return getNsQuota() >= 0 || getDsQuota() >= 0;
+    final Quota.Counts q = getQuotaCounts();
+    return q.get(Quota.NAMESPACE) >= 0 || q.get(Quota.DISKSPACE) >= 0;
   }
   
   /**

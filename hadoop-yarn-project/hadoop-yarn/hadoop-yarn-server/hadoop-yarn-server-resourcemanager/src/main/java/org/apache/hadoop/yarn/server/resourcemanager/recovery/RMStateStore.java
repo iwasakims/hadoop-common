@@ -43,6 +43,7 @@ import org.apache.hadoop.yarn.api.records.ApplicationSubmissionContext;
 import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.FinalApplicationStatus;
 import org.apache.hadoop.yarn.api.records.impl.pb.ApplicationSubmissionContextPBImpl;
+
 import org.apache.hadoop.yarn.event.AsyncDispatcher;
 import org.apache.hadoop.yarn.event.Dispatcher;
 import org.apache.hadoop.yarn.event.EventHandler;
@@ -261,17 +262,20 @@ public abstract class RMStateStore extends AbstractService {
   }
   
   AsyncDispatcher dispatcher;
-  
-  public synchronized void serviceInit(Configuration conf) throws Exception{    
+
+  @Override
+  protected void serviceInit(Configuration conf) throws Exception{
     // create async handler
     dispatcher = new AsyncDispatcher();
     dispatcher.init(conf);
     dispatcher.register(RMStateStoreEventType.class, 
                         new ForwardingEventHandler());
+    dispatcher.setDrainEventsOnStop();
     initInternal(conf);
   }
-  
-  protected synchronized void serviceStart() throws Exception {
+
+  @Override
+  protected void serviceStart() throws Exception {
     dispatcher.start();
     startInternal();
   }
@@ -288,11 +292,12 @@ public abstract class RMStateStore extends AbstractService {
    */
   protected abstract void startInternal() throws Exception;
 
-  public synchronized void serviceStop() throws Exception {
+  @Override
+  protected void serviceStop() throws Exception {
     closeInternal();
     dispatcher.stop();
   }
-  
+
   /**
    * Derived classes close themselves using this method.
    * The base class will be closed and the event dispatcher will be shutdown 
@@ -384,9 +389,13 @@ public abstract class RMStateStore extends AbstractService {
    */
   public synchronized void storeRMDelegationTokenAndSequenceNumber(
       RMDelegationTokenIdentifier rmDTIdentifier, Long renewDate,
-      int latestSequenceNumber) throws Exception {
-    storeRMDelegationTokenAndSequenceNumberState(rmDTIdentifier, renewDate,
-      latestSequenceNumber);
+      int latestSequenceNumber) {
+    try {
+      storeRMDelegationTokenAndSequenceNumberState(rmDTIdentifier, renewDate,
+          latestSequenceNumber);
+    } catch (Exception e) {
+      notifyStoreOperationFailed(e);
+    }
   }
 
   /**
@@ -402,9 +411,12 @@ public abstract class RMStateStore extends AbstractService {
    * RMDTSecretManager call this to remove the state of a delegation token
    */
   public synchronized void removeRMDelegationToken(
-      RMDelegationTokenIdentifier rmDTIdentifier, int sequenceNumber)
-      throws Exception {
-    removeRMDelegationTokenState(rmDTIdentifier);
+      RMDelegationTokenIdentifier rmDTIdentifier, int sequenceNumber) {
+    try {
+      removeRMDelegationTokenState(rmDTIdentifier);
+    } catch (Exception e) {
+      notifyStoreOperationFailed(e);
+    }
   }
 
   /**
@@ -417,9 +429,12 @@ public abstract class RMStateStore extends AbstractService {
   /**
    * RMDTSecretManager call this to store the state of a master key
    */
-  public synchronized void storeRMDTMasterKey(DelegationKey delegationKey)
-      throws Exception {
-    storeRMDTMasterKeyState(delegationKey);
+  public synchronized void storeRMDTMasterKey(DelegationKey delegationKey) {
+    try {
+      storeRMDTMasterKeyState(delegationKey);
+    } catch (Exception e) {
+      notifyStoreOperationFailed(e);
+    }
   }
 
   /**
@@ -433,9 +448,12 @@ public abstract class RMStateStore extends AbstractService {
   /**
    * RMDTSecretManager call this to remove the state of a master key
    */
-  public synchronized void removeRMDTMasterKey(DelegationKey delegationKey)
-      throws Exception {
-    removeRMDTMasterKeyState(delegationKey);
+  public synchronized void removeRMDTMasterKey(DelegationKey delegationKey) {
+    try {
+      removeRMDTMasterKeyState(delegationKey);
+    } catch (Exception e) {
+      notifyStoreOperationFailed(e);
+    }
   }
 
   /**
@@ -509,8 +527,7 @@ public abstract class RMStateStore extends AbstractService {
   }
 
   // Dispatcher related code
-  
-  private synchronized void handleStoreEvent(RMStateStoreEvent event) {
+  protected void handleStoreEvent(RMStateStoreEvent event) {
     if (event.getType().equals(RMStateStoreEventType.STORE_APP)
         || event.getType().equals(RMStateStoreEventType.UPDATE_APP)) {
       ApplicationState appState = null;
@@ -536,19 +553,15 @@ public abstract class RMStateStore extends AbstractService {
       try {
         if (event.getType().equals(RMStateStoreEventType.STORE_APP)) {
           storeApplicationStateInternal(appId.toString(), appStateData);
+          notifyDoneStoringApplication(appId, storedException);
         } else {
           assert event.getType().equals(RMStateStoreEventType.UPDATE_APP);
           updateApplicationStateInternal(appId.toString(), appStateData);
+          notifyDoneUpdatingApplication(appId, storedException);
         }
       } catch (Exception e) {
         LOG.error("Error storing app: " + appId, e);
-        storedException = e;
-      } finally {
-        if (event.getType().equals(RMStateStoreEventType.STORE_APP)) {
-          notifyDoneStoringApplication(appId, storedException);
-        } else {
-          notifyDoneUpdatingApplication(appId, storedException);
-        }
+        notifyStoreOperationFailed(e);
       }
     } else if (event.getType().equals(RMStateStoreEventType.STORE_APP_ATTEMPT)
         || event.getType().equals(RMStateStoreEventType.UPDATE_APP_ATTEMPT)) {
@@ -586,24 +599,20 @@ public abstract class RMStateStore extends AbstractService {
         if (event.getType().equals(RMStateStoreEventType.STORE_APP_ATTEMPT)) {
           storeApplicationAttemptStateInternal(attemptState.getAttemptId()
             .toString(), attemptStateData);
+          notifyDoneStoringApplicationAttempt(attemptState.getAttemptId(),
+              storedException);
         } else {
           assert event.getType().equals(
             RMStateStoreEventType.UPDATE_APP_ATTEMPT);
           updateApplicationAttemptStateInternal(attemptState.getAttemptId()
             .toString(), attemptStateData);
+          notifyDoneUpdatingApplicationAttempt(attemptState.getAttemptId(),
+              storedException);
         }
       } catch (Exception e) {
-        LOG
-          .error("Error storing appAttempt: " + attemptState.getAttemptId(), e);
-        storedException = e;
-      } finally {
-        if (event.getType().equals(RMStateStoreEventType.STORE_APP_ATTEMPT)) {
-          notifyDoneStoringApplicationAttempt(attemptState.getAttemptId(),
-            storedException);
-        } else {
-          notifyDoneUpdatingApplicationAttempt(attemptState.getAttemptId(),
-            storedException);
-        }
+        LOG.error(
+            "Error storing appAttempt: " + attemptState.getAttemptId(), e);
+        notifyStoreOperationFailed(e);
       }
     } else if (event.getType().equals(RMStateStoreEventType.REMOVE_APP)) {
       ApplicationState appState =
@@ -613,15 +622,32 @@ public abstract class RMStateStore extends AbstractService {
       LOG.info("Removing info for app: " + appId);
       try {
         removeApplicationState(appState);
+        notifyDoneRemovingApplcation(appId, removedException);
       } catch (Exception e) {
         LOG.error("Error removing app: " + appId, e);
-        removedException = e;
-      } finally {
-        notifyDoneRemovingApplcation(appId, removedException);
+        notifyStoreOperationFailed(e);
       }
     } else {
       LOG.error("Unknown RMStateStoreEvent type: " + event.getType());
     }
+  }
+
+  @SuppressWarnings("unchecked")
+  /**
+   * In {#handleStoreEvent}, this method is called to notify the
+   * ResourceManager that the store operation has failed.
+   * @param failureCause the exception due to which the operation failed
+   */
+  private void notifyStoreOperationFailed(Exception failureCause) {
+    RMStateStoreOperationFailedEventType type;
+    if (failureCause instanceof StoreFencedException) {
+      type = RMStateStoreOperationFailedEventType.FENCED;
+    } else {
+      type = RMStateStoreOperationFailedEventType.FAILED;
+    }
+
+    rmDispatcher.getEventHandler().handle(
+        new RMStateStoreOperationFailedEvent(type, failureCause));
   }
 
   @SuppressWarnings("unchecked")

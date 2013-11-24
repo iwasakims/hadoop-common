@@ -1096,38 +1096,49 @@ public interface ClientProtocol {
       String fromSnapshot, String toSnapshot) throws IOException;
 
   /**
-   * Add a PathBasedCache entry to the CacheManager.
+   * Add a CacheDirective to the CacheManager.
    * 
-   * @param directive A PathBasedCacheDirective to be added
-   * @return A PathBasedCacheDescriptor associated with the added directive
+   * @param directive A CacheDirectiveInfo to be added
+   * @return A CacheDirectiveInfo associated with the added directive
    * @throws IOException if the directive could not be added
    */
   @AtMostOnce
-  public PathBasedCacheDescriptor addPathBasedCacheDirective(
-      PathBasedCacheDirective directive) throws IOException;
+  public long addCacheDirective(
+      CacheDirectiveInfo directive) throws IOException;
 
   /**
-   * Remove a PathBasedCacheDescriptor from the CacheManager.
+   * Modify a CacheDirective in the CacheManager.
    * 
-   * @param id of a PathBasedCacheDescriptor
-   * @throws IOException if the cache descriptor could not be removed
+   * @return directive The directive to modify.  Must contain 
+   *                   a directive ID.
+   * @throws IOException if the directive could not be modified
    */
   @AtMostOnce
-  public void removePathBasedCacheDescriptor(Long id) throws IOException;
+  public void modifyCacheDirective(
+      CacheDirectiveInfo directive) throws IOException;
+
+  /**
+   * Remove a CacheDirectiveInfo from the CacheManager.
+   * 
+   * @param id of a CacheDirectiveInfo
+   * @throws IOException if the cache directive could not be removed
+   */
+  @AtMostOnce
+  public void removeCacheDirective(long id) throws IOException;
 
   /**
    * List the set of cached paths of a cache pool. Incrementally fetches results
    * from the server.
    * 
    * @param prevId The last listed entry ID, or -1 if this is the first call to
-   *          listPathBasedCacheDescriptors.
-   * @param pool The cache pool to list, or null to list all pools.
-   * @param path The path name to list, or null to list all paths.
-   * @return A RemoteIterator which returns PathBasedCacheDescriptor objects.
+   *               listCacheDirectives.
+   * @param filter Parameters to use to filter the list results, 
+   *               or null to display all directives visible to us.
+   * @return A RemoteIterator which returns CacheDirectiveInfo objects.
    */
   @Idempotent
-  public RemoteIterator<PathBasedCacheDescriptor> listPathBasedCacheDescriptors(
-      long prevId, String pool, String path) throws IOException;
+  public RemoteIterator<CacheDirectiveEntry> listCacheDirectives(
+      long prevId, CacheDirectiveInfo filter) throws IOException;
 
   /**
    * Add a new cache pool.

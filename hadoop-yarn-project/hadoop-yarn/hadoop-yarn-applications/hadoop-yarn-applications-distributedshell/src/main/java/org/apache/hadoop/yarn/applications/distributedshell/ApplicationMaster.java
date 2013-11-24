@@ -19,8 +19,11 @@
 package org.apache.hadoop.yarn.applications.distributedshell;
 
 import java.io.BufferedReader;
+import java.io.DataInputStream;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
+import java.io.StringReader;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
@@ -46,10 +49,12 @@ import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.DataOutputBuffer;
+import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.Token;
+import org.apache.hadoop.util.Shell;
 import org.apache.hadoop.yarn.api.ApplicationConstants;
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment;
 import org.apache.hadoop.yarn.api.ApplicationMasterProtocol;
@@ -215,6 +220,11 @@ public class ApplicationMaster {
   // Hardcoded path to shell script in launch container's local env
   private final String ExecShellStringPath = "ExecShellScript.sh";
 
+  // Hardcoded path to custom log_properties
+  private final String log4jPath = "log4j.properties";
+
+  private final String shellCommandPath = "shellCommands";
+
   private volatile boolean done;
   private volatile boolean success;
 
@@ -262,25 +272,20 @@ public class ApplicationMaster {
           + env.getValue());
     }
 
-    String cmd = "ls -al";
-    Runtime run = Runtime.getRuntime();
-    Process pr = null;
+    BufferedReader buf = null;
     try {
-      pr = run.exec(cmd);
-      pr.waitFor();
-
-      BufferedReader buf = new BufferedReader(new InputStreamReader(
-          pr.getInputStream()));
+      String lines = Shell.WINDOWS ? Shell.execCommand("cmd", "/c", "dir") :
+        Shell.execCommand("ls", "-al");
+      buf = new BufferedReader(new StringReader(lines));
       String line = "";
       while ((line = buf.readLine()) != null) {
         LOG.info("System CWD content: " + line);
         System.out.println("System CWD content: " + line);
       }
-      buf.close();
     } catch (IOException e) {
       e.printStackTrace();
-    } catch (InterruptedException e) {
-      e.printStackTrace();
+    } finally {
+      IOUtils.cleanup(LOG, buf);
     }
   }
 
@@ -302,8 +307,6 @@ public class ApplicationMaster {
     Options opts = new Options();
     opts.addOption("app_attempt_id", true,
         "App Attempt ID. Not to be used unless for testing purposes");
-    opts.addOption("shell_command", true,
-        "Shell command to be executed by the Application Master");
     opts.addOption("shell_script", true,
         "Location of the shell script to be executed");
     opts.addOption("shell_args", true, "Command line args for the shell script");
@@ -325,6 +328,16 @@ public class ApplicationMaster {
       printUsage(opts);
       throw new IllegalArgumentException(
           "No args specified for application master to initialize");
+    }
+
+    //Check whether customer log4j.properties file exists
+    File customerLog4jFile = new File(log4jPath);
+    if (customerLog4jFile.exists()) {
+      try {
+        Log4jPropertyHelper.updateLog4jConfiguration(ApplicationMaster.class, log4jPath);
+      } catch (Exception e) {
+        LOG.warn("Can not set up custom log4j properties. " + e);
+      }
     }
 
     if (cliParser.hasOption("help")) {
@@ -374,11 +387,20 @@ public class ApplicationMaster {
         + appAttemptID.getApplicationId().getClusterTimestamp()
         + ", attemptId=" + appAttemptID.getAttemptId());
 
-    if (!cliParser.hasOption("shell_command")) {
+    File shellCommandFile = new File(shellCommandPath);
+    if (!shellCommandFile.exists()) {
       throw new IllegalArgumentException(
           "No shell command specified to be executed by application master");
     }
-    shellCommand = cliParser.getOptionValue("shell_command");
+    FileInputStream fs = null;
+    DataInputStream ds = null;
+    try {
+      ds = new DataInputStream(new FileInputStream(shellCommandFile));
+      shellCommand = ds.readUTF();
+    } finally {
+      org.apache.commons.io.IOUtils.closeQuietly(ds);
+      org.apache.commons.io.IOUtils.closeQuietly(fs);
+    }
 
     if (cliParser.hasOption("shell_args")) {
       shellArgs = cliParser.getOptionValue("shell_args");

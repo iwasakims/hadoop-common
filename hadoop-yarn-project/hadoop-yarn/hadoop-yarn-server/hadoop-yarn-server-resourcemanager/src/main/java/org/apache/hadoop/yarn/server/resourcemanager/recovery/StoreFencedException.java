@@ -15,25 +15,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs;
+package org.apache.hadoop.yarn.server.resourcemanager.recovery;
 
-import java.io.IOException;
+import org.apache.hadoop.yarn.exceptions.YarnException;
 
-import org.apache.hadoop.conf.Configuration;
-import org.junit.Test;
+public class StoreFencedException extends YarnException {
+  private static final long serialVersionUID = 1L;
 
-public class TestNameNodeHttpServer {
-
-  @Test
-  public void testSslConfiguration() throws IOException {
-    Configuration conf = new Configuration();
-    conf.setBoolean(DFSConfigKeys.DFS_HTTPS_ENABLE_KEY, true);
-    System.setProperty("jetty.ssl.password", "foo");
-    System.setProperty("jetty.ssl.keypassword", "bar");
-
-    MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).numDataNodes(0)
-        .build();
-
-    cluster.shutdown();
+  public StoreFencedException() {
+    super("RMStateStore has been fenced");
   }
 }

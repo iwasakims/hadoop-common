@@ -99,7 +99,7 @@ class DFSClientCache {
     this.config = config;
     this.clientCache = CacheBuilder.newBuilder()
         .maximumSize(clientCache)
-        .removalListener(clientRemovealListener())
+        .removalListener(clientRemovalListener())
         .build(clientLoader());
 
     this.inputstreamCache = CacheBuilder.newBuilder()
@@ -118,6 +118,7 @@ class DFSClientCache {
 
         // Guava requires CacheLoader never returns null.
         return ugi.doAs(new PrivilegedExceptionAction<DFSClient>() {
+          @Override
           public DFSClient run() throws IOException {
             return new DFSClient(NameNode.getAddress(config), config);
           }
@@ -126,7 +127,7 @@ class DFSClientCache {
     };
   }
 
-  private RemovalListener<String, DFSClient> clientRemovealListener() {
+  private RemovalListener<String, DFSClient> clientRemovalListener() {
     return new RemovalListener<String, DFSClient>() {
       @Override
       public void onRemoval(RemovalNotification<String, DFSClient> notification) {

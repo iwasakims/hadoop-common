@@ -61,8 +61,8 @@ import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.HDFSPolicyProvider;
 import org.apache.hadoop.hdfs.protocol.AlreadyBeingCreatedException;
 import org.apache.hadoop.hdfs.protocol.BlockListAsLongs;
-import org.apache.hadoop.hdfs.protocol.PathBasedCacheDirective;
-import org.apache.hadoop.hdfs.protocol.PathBasedCacheDescriptor;
+import org.apache.hadoop.hdfs.protocol.CacheDirectiveEntry;
+import org.apache.hadoop.hdfs.protocol.CacheDirectiveInfo;
 import org.apache.hadoop.hdfs.protocol.CachePoolInfo;
 import org.apache.hadoop.hdfs.protocol.CorruptFileBlocks;
 import org.apache.hadoop.hdfs.protocol.DatanodeID;
@@ -1234,46 +1234,52 @@ class NameNodeRpcServer implements NamenodeProtocols {
   }
 
   @Override
-  public PathBasedCacheDescriptor addPathBasedCacheDirective(
-      PathBasedCacheDirective path) throws IOException {
-    return namesystem.addPathBasedCacheDirective(path);
+  public long addCacheDirective(
+      CacheDirectiveInfo path) throws IOException {
+    return namesystem.addCacheDirective(path);
   }
 
   @Override
-  public void removePathBasedCacheDescriptor(Long id) throws IOException {
-    namesystem.removePathBasedCacheDescriptor(id);
+  public void modifyCacheDirective(
+      CacheDirectiveInfo directive) throws IOException {
+    namesystem.modifyCacheDirective(directive);
   }
 
-  private class ServerSidePathBasedCacheEntriesIterator
-      extends BatchedRemoteIterator<Long, PathBasedCacheDescriptor> {
+  @Override
+  public void removeCacheDirective(long id) throws IOException {
+    namesystem.removeCacheDirective(id);
+  }
 
-    private final String pool;
+  private class ServerSideCacheEntriesIterator 
+      extends BatchedRemoteIterator<Long, CacheDirectiveEntry> {
 
-    private final String path;
-
-    public ServerSidePathBasedCacheEntriesIterator(Long firstKey, String pool,
-        String path) {
+    private final CacheDirectiveInfo filter;
+    
+    public ServerSideCacheEntriesIterator (Long firstKey, 
+        CacheDirectiveInfo filter) {
       super(firstKey);
-      this.pool = pool;
-      this.path = path;
+      this.filter = filter;
     }
 
     @Override
-    public BatchedEntries<PathBasedCacheDescriptor> makeRequest(
+    public BatchedEntries<CacheDirectiveEntry> makeRequest(
         Long nextKey) throws IOException {
-      return namesystem.listPathBasedCacheDescriptors(nextKey, pool, path);
+      return namesystem.listCacheDirectives(nextKey, filter);
     }
 
     @Override
-    public Long elementToPrevKey(PathBasedCacheDescriptor entry) {
-      return entry.getEntryId();
+    public Long elementToPrevKey(CacheDirectiveEntry entry) {
+      return entry.getInfo().getId();
     }
   }
   
   @Override
-  public RemoteIterator<PathBasedCacheDescriptor> listPathBasedCacheDescriptors(long prevId,
-      String pool, String path) throws IOException {
-    return new ServerSidePathBasedCacheEntriesIterator(prevId, pool, path);
+  public RemoteIterator<CacheDirectiveEntry> listCacheDirectives(long prevId,
+      CacheDirectiveInfo filter) throws IOException {
+    if (filter == null) {
+      filter = new CacheDirectiveInfo.Builder().build();
+    }
+    return new ServerSideCacheEntriesIterator(prevId, filter);
   }
 
   @Override
