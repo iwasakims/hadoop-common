@@ -30,6 +30,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Public;
 import org.apache.hadoop.classification.InterfaceStability.Evolving;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.tracing.SpanReceiverHost;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -172,6 +173,7 @@ public abstract class AbstractService implements Service {
           throw ServiceStateException.convert(e);
         }
       }
+      SpanReceiverHost.init(conf);
     }
   }
 
