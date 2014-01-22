@@ -32,7 +32,7 @@ Hadoop in Secure Mode
   in order to use Hadoop services.
   
   Security features of Hadoop consist of
-  service level authentication,
+  {{{Authentication}authentication}},
   {{{./ServiceLevelAuth.html}service level authorization}},
   {{{./HttpAuthentication.html}authentication for Web consoles}}
   and {{{Data confidentiality}data confidenciality}}.
@@ -220,20 +220,21 @@ KVNO Timestamp         Principal
 
 ** Secure DataNode
 
-Because the data transfer protocol of datanode does not use
-the RPC framework of Hadoop,
-DataNode must authenticate itself by
-using privileged port which is specifiled by
-<<<dfs.datanode.address>>> and <<<dfs.datanode.http.address>>>.
-This authentication is based on the assumption 
-that the attacker won't be able to get root privileges.
-
-When you execute <<<hdfs datanode>>> command as root,
-server process binds privileged port at first,
-then drops privilege and runs as the user account speficied by 
-<<<HADOOP_SECURE_DN_USER>>> using jsvc installed to <<<JSVC_HOME>>>.
-You must specify <<<HADOOP_SECURE_DN_USER>>> and <<JSVC_HOME>>
-as environment variables on start up (in hadoop-env.sh).
+  Because the data transfer protocol of DataNode
+  does not use the RPC framework of Hadoop,
+  DataNode must authenticate itself by
+  using privileged ports which is specifiled by
+  <<<dfs.datanode.address>>> and <<<dfs.datanode.http.address>>>.
+  This authentication is based on the assumption
+  that the attacker won't be able to get root privileges.
+  
+  When you execute <<<hdfs datanode>>> command as root,
+  server process binds privileged port at first,
+  then drops privilege and runs as the user account specified by 
+  <<<HADOOP_SECURE_DN_USER>>>.
+  This startup process uses jsvc installed to <<<JSVC_HOME>>>.
+  You must specify <<<HADOOP_SECURE_DN_USER>>> and <<<JSVC_HOME>>>
+  as environment variables on start up (in hadoop-env.sh).
 
 
 * Data confidentiality
@@ -424,7 +425,25 @@ Configuration for <<<conf/hdfs-site.xml>>>
 *-------------------------+-------------------------+------------------------+
 Configuration for <<<conf/hdfs-site.xml>>>
 
-**  ResourceManager
+
+** WebHDFS
+
+*-------------------------+-------------------------+------------------------+
+|| Parameter              || Value                  || Notes                 |
+*-------------------------+-------------------------+------------------------+
+| <<<dfs.webhdfs.enabled>>> | http/_HOST@REALM.TLD | |
+| | | Enable security on WebHDFS. |
+*-------------------------+-------------------------+------------------------+
+| <<<dfs.web.authentication.kerberos.principal>>> | http/_HOST@REALM.TLD | |
+| | | Kerberos keytab file for the WebHDFS. |
+*-------------------------+-------------------------+------------------------+
+| <<<dfs.web.authentication.kerberos.keytab>>> | </etc/security/keytab/http.service.keytab> | |
+| | | Kerberos principal name for WebHDFS. |
+*-------------------------+-------------------------+------------------------+
+Configuration for <<<conf/hdfs-site.xml>>>
+
+
+** ResourceManager
 
 *-------------------------+-------------------------+------------------------+
 || Parameter              || Value                  || Notes                 |
@@ -456,7 +475,7 @@ Configuration for  <<<conf/yarn-site.xml>>>
 | <<<yarn.nodemanager.linux-container-executor.group>>> | <hadoop> | |
 | | | Unix group of the NodeManager. |
 *-------------------------+-------------------------+------------------------+
-| <<<yarn.nodemanager.linux-container-executor.path>>> | </usr/lib/hadoop-yarn/bin/container-executor> | |
+| <<<yarn.nodemanager.linux-container-executor.path>>> | </path/to/bin/container-executor> | |
 | | | The path to the executable of Linux container executor. |
 *-------------------------+-------------------------+------------------------+
 Configuration for  <<<conf/yarn-site.xml>>>
