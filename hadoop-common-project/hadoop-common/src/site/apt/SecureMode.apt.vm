@@ -26,7 +26,7 @@ Hadoop in Secure Mode
   secure mode.
 
   By default Hadoop runs in non-secure mode in which no actual
-  authentication are required.
+  authentication is required.
   By configuring Hadoop runs in secure mode,
   each user and service needs to be authenticated by Kerberos
   in order to use Hadoop services.
@@ -66,7 +66,7 @@ Hadoop in Secure Mode
 | mapred:hadoop | MapReduce JobHistory Server                                          |
 *---------------+----------------------------------------------------------------------+
 
-** Kerberos principles for Hadoop Daemons and Users
+** Kerberos principals for Hadoop Daemons and Users
 
   For running hadoop service daemons in  Hadoop in secure mode,
   Kerberos principals are required.
@@ -174,19 +174,19 @@ KVNO Timestamp         Principal
 
   Hadoop maps Kerberos principal to OS user account using
   the rule specified by <<<hadoop.security.auth_to_local>>>
-  which works in the same way to the <<<auth_to_local>>> in
+  which works in the same way as the <<<auth_to_local>>> in
   {{{http://web.mit.edu/Kerberos/krb5-latest/doc/admin/conf_files/krb5_conf.html}Kerberos configuration file (krb5.conf)}}.
 
   By default, it picks the first component of principal name as a user name
-  if the realms is matched to the <<<defalut_realm>>> (usually defined in /etc/krb5.conf).
+  if the realms matches to the <<<defalut_realm>>> (usually defined in /etc/krb5.conf).
   For example, <<<host/full.qualified.domain.name@REALM.TLD>>> is mapped to <<<host>>>
   by default rule.
 
 ** Mapping from user to group
 
   Though files on HDFS are associated to owner and group,
-  Hadoop does not have the definitio of group by itself.
-  Mapping from user to group is done by OS functionality or LDAP.
+  Hadoop does not have the definition of group by itself.
+  Mapping from user to group is done by OS or LDAP.
 
   You can change a way of mapping by
   specifying the name of mapping provider as a value of
@@ -218,17 +218,40 @@ KVNO Timestamp         Principal
   </property>
 ----
 
+** Secure DataNode
+
+Because the data transfer protocol of datanode does not use
+the RPC framework of Hadoop,
+DataNode must authenticate itself by
+using privileged port which is specifiled by
+<<<dfs.datanode.address>>> and <<<dfs.datanode.http.address>>>.
+This authentication is based on the assumption 
+that the attacker won't be able to get root privileges.
+
+When you execute <<<hdfs datanode>>> command as root,
+server process binds privileged port at first,
+then drops privilege and runs as the user account speficied by 
+<<<HADOOP_SECURE_DN_USER>>> using jsvc installed to <<<JSVC_HOME>>>.
+You must specify <<<HADOOP_SECURE_DN_USER>>> and <<JSVC_HOME>>
+as environment variables on start up (in hadoop-env.sh).
+
 
 * Data confidentiality
+
+** Data Encryption on RPC
 
   The data transfered between hadoop services and clients.
   Setting <<<hadoop.rpc.protection>>> to <<<"privacy">>> in the core-site.xml
   activate data encryption.
 
-  You also need to set <<<dfs.encrypt.data.transfer>>> to <<<"true">>> in the hdfs-site.xml
+** Data Encryption on Block data transfer.
+
+  You need to set <<<dfs.encrypt.data.transfer>>> to <<<"true">>> in the hdfs-site.xml
   in order to activate data encryption for data transfer protocol of DataNode.
-  
-  Data transfer between Web-console and clients are protected by using SSL.
+
+** Data Encryption on HTTP
+
+  Data transfer between Web-console and clients are protected by using SSL(HTTPS).
 
 
 * Configuration
@@ -374,9 +397,17 @@ Configuration for <<<conf/hdfs-site.xml>>>
 *-------------------------+-------------------------+------------------------+
 | <<<dfs.datanode.data.dir.perm>>> | 700 | |
 *-------------------------+-------------------------+------------------------+
-| <<<dfs.datanode.address>>> | <0.0.0.0:2003> | |
+| <<<dfs.datanode.address>>> | <0.0.0.0:1004> | |
+| | | Secure DataNode must use privileged port |
+| | | in order to assure that the server was started securely. |
+| | | This means that the server must be started via jsvc. |
 *-------------------------+-------------------------+------------------------+
-| <<<dfs.datanode.https.address>>> | <0.0.0.0:2005> | |
+| <<<dfs.datanode.http.address>>> | <0.0.0.0:1006> | |
+| | | Secure DataNode must use privileged port |
+| | | in order to assure that the server was started securely. |
+| | | This means that the server must be started via jsvc. |
+*-------------------------+-------------------------+------------------------+
+| <<<dfs.datanode.https.address>>> | <0.0.0.0:50470> | |
 *-------------------------+-------------------------+------------------------+
 | <<<dfs.datanode.keytab.file>>> | </etc/security/keytab/dn.service.keytab> | |
 | | | Kerberos keytab file for the DataNode. |
@@ -424,6 +455,9 @@ Configuration for  <<<conf/yarn-site.xml>>>
 *-------------------------+-------------------------+------------------------+
 | <<<yarn.nodemanager.linux-container-executor.group>>> | <hadoop> | |
 | | | Unix group of the NodeManager. |
+*-------------------------+-------------------------+------------------------+
+| <<<yarn.nodemanager.linux-container-executor.path>>> | </usr/lib/hadoop-yarn/bin/container-executor> | |
+| | | The path to the executable of Linux container executor. |
 *-------------------------+-------------------------+------------------------+
 Configuration for  <<<conf/yarn-site.xml>>>
 
