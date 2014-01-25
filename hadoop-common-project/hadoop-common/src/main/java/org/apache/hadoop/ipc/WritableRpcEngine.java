@@ -41,6 +41,9 @@ import org.apache.hadoop.util.Time;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.*;
+import org.cloudera.htrace.Trace;
+import org.cloudera.htrace.TraceScope;
+import org.cloudera.htrace.impl.ProbabilitySampler;
 
 /** An RpcEngine implementation for Writable data. */
 @InterfaceStability.Evolving
@@ -53,6 +56,9 @@ public class WritableRpcEngine implements RpcEngine {
   // 2L - added declared class to Invocation
   public static final long writableRpcVersion = 2L;
   
+  private static final ProbabilitySampler CLIENT_TRACE_SAMPLER =
+      new ProbabilitySampler(1.0f);
+
   /**
    * Whether or not this class has been initialized.
    */
@@ -227,9 +233,16 @@ public class WritableRpcEngine implements RpcEngine {
       if (LOG.isDebugEnabled()) {
         startTime = Time.now();
       }
-
-      ObjectWritable value = (ObjectWritable)
-        client.call(RPC.RpcKind.RPC_WRITABLE, new Invocation(method, args), remoteId);
+      
+      TraceScope traceSpan = Trace.startSpan("Call " + method.getName() + " to " +
+          remoteId, CLIENT_TRACE_SAMPLER);
+      ObjectWritable value;
+      try {
+        value = (ObjectWritable)
+          client.call(RPC.RpcKind.RPC_WRITABLE, new Invocation(method, args), remoteId);
+      } finally {
+        traceSpan.close();
+      }
       if (LOG.isDebugEnabled()) {
         long callTime = Time.now() - startTime;
         LOG.debug("Call: " + method.getName() + " " + callTime);

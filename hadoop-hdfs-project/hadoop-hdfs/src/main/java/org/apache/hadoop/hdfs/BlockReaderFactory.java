@@ -51,7 +51,7 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.Time;
-
+import org.cloudera.htrace.Span;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 
@@ -156,6 +156,11 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
    */
   private int remainingCacheTries;
 
+  /**
+   * Trancing information of HTrace, if exists.
+   */
+  private Span parentSpan;
+
   public BlockReaderFactory(DFSClient.Conf conf) {
     this.conf = conf;
     this.remainingCacheTries = conf.nCachedConnRetry;
@@ -240,6 +245,11 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
   public BlockReaderFactory setConfiguration(
       Configuration configuration) {
     this.configuration = configuration;
+    return this;
+  }
+
+  public BlockReaderFactory setParentSpan(Span parentSpan) {
+    this.parentSpan = parentSpan;
     return this;
   }
 
@@ -747,7 +757,8 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
   }
 
   @SuppressWarnings("deprecation")
-  private BlockReader getRemoteBlockReader(Peer peer) throws IOException {
+  private BlockReader getRemoteBlockReader(Peer peer)
+    throws IOException {
     if (conf.useLegacyBlockReader) {
       return RemoteBlockReader.newBlockReader(fileName,
           block, token, startOffset, length, conf.ioBufferSize,
@@ -757,7 +768,7 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
       return RemoteBlockReader2.newBlockReader(
           fileName, block, token, startOffset, length,
           verifyChecksum, clientName, peer, datanode,
-          clientContext.getPeerCache(), cachingStrategy);
+          clientContext.getPeerCache(), cachingStrategy, parentSpan);
     }
   }
 

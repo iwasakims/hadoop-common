@@ -73,6 +73,7 @@ import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.DataChecksum;
+import org.cloudera.htrace.Trace;
 
 import com.google.protobuf.ByteString;
 
@@ -474,6 +475,7 @@ class DataXceiver extends Receiver implements Runnable {
         if (LOG.isDebugEnabled()) {
           LOG.debug("Connecting to datanode " + mirrorNode);
         }
+        Trace.addTimelineAnnotation("Connecting to downstream " + mirrorNode);
         mirrorTarget = NetUtils.createSocketAddr(mirrorNode);
         mirrorSock = datanode.newSocket();
         try {
@@ -511,6 +513,7 @@ class DataXceiver extends Receiver implements Runnable {
 
           // read connect ack (only for clients, not for replication req)
           if (isClient) {
+            Trace.addTimelineAnnotation("Waiting for connect ack from downstream");
             BlockOpResponseProto connectAck =
               BlockOpResponseProto.parseFrom(PBHelper.vintPrefixed(mirrorIn));
             mirrorInStatus = connectAck.getStatus();
@@ -521,9 +524,16 @@ class DataXceiver extends Receiver implements Runnable {
                        " from downstream datanode with firstbadlink as " +
                        firstBadLink);
             }
+            if (mirrorInStatus != SUCCESS) {
+              Trace.addTimelineAnnotation("Bad downstream: firstbadlink=" +
+                  firstBadLink);
+            } else {
+              Trace.addTimelineAnnotation("Connected");
+            }
           }
-
         } catch (IOException e) {
+          Trace.addTimelineAnnotation("Failed to connect to downstream: " +
+              e.getLocalizedMessage());
           if (isClient) {
             BlockOpResponseProto.newBuilder()
               .setStatus(ERROR)
@@ -593,7 +603,9 @@ class DataXceiver extends Receiver implements Runnable {
       // the block is finalized in the PacketResponder.
       if (isDatanode ||
           stage == BlockConstructionStage.PIPELINE_CLOSE_RECOVERY) {
+        Trace.addTimelineAnnotation("Closing block");
         datanode.closeBlock(block, DataNode.EMPTY_DEL_HINT, storageUuid);
+        Trace.addTimelineAnnotation("Block closed");
         LOG.info("Received " + block + " src: " + remoteAddress + " dest: "
             + localAddress + " of size " + block.getNumBytes());
       }
@@ -908,7 +920,7 @@ class DataXceiver extends Receiver implements Runnable {
   /**
    * Utility function for sending a response.
    * 
-   * @param opStatus status message to write
+   * @param status status message to write
    * @param message message to send to the client or other DN
    */
   private void sendResponse(Status status,

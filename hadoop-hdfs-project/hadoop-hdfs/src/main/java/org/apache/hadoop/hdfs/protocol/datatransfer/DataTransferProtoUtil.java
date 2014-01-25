@@ -25,11 +25,14 @@ import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.BaseHeaderProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.ChecksumProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.ClientOperationHeaderProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.OpWriteBlockProto;
+import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.TraceInfo;
 import org.apache.hadoop.hdfs.protocol.proto.HdfsProtos.ChecksumTypeProto;
 import org.apache.hadoop.hdfs.protocolPB.PBHelper;
 import org.apache.hadoop.hdfs.security.token.block.BlockTokenIdentifier;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.DataChecksum;
+import org.cloudera.htrace.Span;
+import org.cloudera.htrace.Trace;
 
 
 /**
@@ -68,19 +71,32 @@ public abstract class DataTransferProtoUtil {
 
   static ClientOperationHeaderProto buildClientHeader(ExtendedBlock blk,
       String client, Token<BlockTokenIdentifier> blockToken) {
-    ClientOperationHeaderProto header =
+    ClientOperationHeaderProto.Builder builder =
       ClientOperationHeaderProto.newBuilder()
         .setBaseHeader(buildBaseHeader(blk, blockToken))
-        .setClientName(client)
-        .build();
-    return header;
+        .setClientName(client);
+    return builder.build();
   }
 
   static BaseHeaderProto buildBaseHeader(ExtendedBlock blk,
       Token<BlockTokenIdentifier> blockToken) {
-    return BaseHeaderProto.newBuilder()
+    BaseHeaderProto.Builder builder =  BaseHeaderProto.newBuilder()
       .setBlock(PBHelper.convert(blk))
-      .setToken(PBHelper.convert(blockToken))
-      .build();
+      .setToken(PBHelper.convert(blockToken));
+    if (Trace.isTracing()) {
+      Span s = Trace.currentSpan();
+      builder.setTraceInfo(TraceInfo.newBuilder()
+          .setTraceId(s.getTraceId())
+          .setParentSpanId(s.getSpanId()));
+    }
+
+    return builder.build();
+  }
+
+  public static org.cloudera.htrace.TraceInfo fromProto(TraceInfo proto) {
+    if (proto == null) return null;
+    if (!proto.hasTraceId()) return null;
+    return new org.cloudera.htrace.TraceInfo(proto.getTraceId(),
+        proto.getParentSpanId());
   }
 }

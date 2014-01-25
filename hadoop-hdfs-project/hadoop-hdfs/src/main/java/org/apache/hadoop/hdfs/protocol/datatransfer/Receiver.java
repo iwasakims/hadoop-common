@@ -35,6 +35,8 @@ import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.CachingStrategyP
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.OpWriteBlockProto;
 import org.apache.hadoop.hdfs.protocolPB.PBHelper;
 import org.apache.hadoop.hdfs.server.datanode.CachingStrategy;
+import org.cloudera.htrace.Trace;
+import org.cloudera.htrace.TraceScope;
 
 /** Receiver */
 @InterfaceAudience.Private
@@ -98,7 +100,11 @@ public abstract class Receiver implements DataTransferProtocol {
   /** Receive OP_READ_BLOCK */
   private void opReadBlock() throws IOException {
     OpReadBlockProto proto = OpReadBlockProto.parseFrom(vintPrefixed(in));
-    readBlock(PBHelper.convert(proto.getHeader().getBaseHeader().getBlock()),
+
+    TraceScope scope = Trace.startSpan("Receiver.opReadBlock",
+        fromProto(proto.getHeader().getBaseHeader().getTraceInfo()));
+    try {
+      readBlock(PBHelper.convert(proto.getHeader().getBaseHeader().getBlock()),
         PBHelper.convert(proto.getHeader().getBaseHeader().getToken()),
         proto.getHeader().getClientName(),
         proto.getOffset(),
@@ -107,12 +113,20 @@ public abstract class Receiver implements DataTransferProtocol {
         (proto.hasCachingStrategy() ?
             getCachingStrategy(proto.getCachingStrategy()) :
           CachingStrategy.newDefaultStrategy()));
+    } finally {
+        scope.close();
+    }
   }
   
   /** Receive OP_WRITE_BLOCK */
   private void opWriteBlock(DataInputStream in) throws IOException {
     final OpWriteBlockProto proto = OpWriteBlockProto.parseFrom(vintPrefixed(in));
-    writeBlock(PBHelper.convert(proto.getHeader().getBaseHeader().getBlock()),
+
+    TraceScope scope = Trace.startSpan("Receiver.opWriteBlock",
+        fromProto(proto.getHeader().getBaseHeader().getTraceInfo()));
+
+    try {
+      writeBlock(PBHelper.convert(proto.getHeader().getBaseHeader().getBlock()),
         PBHelper.convert(proto.getHeader().getBaseHeader().getToken()),
         proto.getHeader().getClientName(),
         PBHelper.convert(proto.getTargetsList()),
@@ -125,22 +139,33 @@ public abstract class Receiver implements DataTransferProtocol {
         (proto.hasCachingStrategy() ?
             getCachingStrategy(proto.getCachingStrategy()) :
           CachingStrategy.newDefaultStrategy()));
+    } finally {
+      scope.close();
+    }
   }
 
   /** Receive {@link Op#TRANSFER_BLOCK} */
   private void opTransferBlock(DataInputStream in) throws IOException {
     final OpTransferBlockProto proto =
       OpTransferBlockProto.parseFrom(vintPrefixed(in));
-    transferBlock(PBHelper.convert(proto.getHeader().getBaseHeader().getBlock()),
-        PBHelper.convert(proto.getHeader().getBaseHeader().getToken()),
-        proto.getHeader().getClientName(),
-        PBHelper.convert(proto.getTargetsList()));
+
+    TraceScope scope = Trace.startSpan("Receiver.opTransferBlock",
+        fromProto(proto.getHeader().getBaseHeader().getTraceInfo()));
+    try {
+      transferBlock(PBHelper.convert(proto.getHeader().getBaseHeader().getBlock()),
+          PBHelper.convert(proto.getHeader().getBaseHeader().getToken()),
+          proto.getHeader().getClientName(),
+          PBHelper.convert(proto.getTargetsList()));
+    } finally {
+      scope.close();
+    }
   }
 
   /** Receive {@link Op#REQUEST_SHORT_CIRCUIT_FDS} */
   private void opRequestShortCircuitFds(DataInputStream in) throws IOException {
     final OpRequestShortCircuitAccessProto proto =
       OpRequestShortCircuitAccessProto.parseFrom(vintPrefixed(in));
+
     requestShortCircuitFds(PBHelper.convert(proto.getHeader().getBlock()),
         PBHelper.convert(proto.getHeader().getToken()),
         proto.getMaxVersion());

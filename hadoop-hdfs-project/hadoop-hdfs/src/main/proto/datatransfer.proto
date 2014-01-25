@@ -47,6 +47,12 @@ message DataTransferEncryptorMessageProto {
 message BaseHeaderProto {
   required ExtendedBlockProto block = 1;
   optional hadoop.common.TokenProto token = 2;
+  optional TraceInfo traceInfo = 3;
+}
+
+message TraceInfo {
+  required uint64 traceId = 1;
+  required uint64 parentSpanId = 2;
 }
 
 message ClientOperationHeaderProto {
