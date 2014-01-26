@@ -78,9 +78,7 @@ message RpcRequestHeaderProto { // the header for the RpcRequest
   // clientId + callId uniquely identifies a request
   // retry count, 1 means this is the first retry
   optional sint32 retryCount = 5 [default = -1];
-
-    /** tracing info */
-    optional RPCTInfo traceInfo = 6;
+  optional RPCTInfo traceInfo = 6; // tracing info
 }
 
 

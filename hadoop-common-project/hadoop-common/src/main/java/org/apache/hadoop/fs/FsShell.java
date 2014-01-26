@@ -256,8 +256,12 @@ public class FsShell extends Configured implements Tool {
     } else {
       String cmd = argv[0];
       Command instance = null;
-      TraceScope s = Trace.startSpan("FsShell command: " +
-          Joiner.on(" ").join(argv), Sampler.ALWAYS);
+      TraceScope traceScope = null;
+      if (Trace.isTracing()) {
+        traceScope = Trace.startSpan("FsShell command: " +
+                                     Joiner.on(" ").join(argv), 
+                                     Sampler.ALWAYS);
+      }
       try {
         instance = commandFactory.getInstance(cmd);
         if (instance == null) {
@@ -275,7 +279,7 @@ public class FsShell extends Configured implements Tool {
         displayError(cmd, "Fatal internal error");
         e.printStackTrace(System.err);
       } finally {
-        s.close();
+        if (traceScope != null) traceScope.close();
       }
     }
     return exitCode;

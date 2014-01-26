@@ -999,6 +999,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
             setClientCacheContext(dfsClient.getClientContext()).
             setUserGroupInformation(dfsClient.ugi).
             setConfiguration(dfsClient.getConfiguration()).
+            setParentSpan(traceSpan).
             build();
         int nread = reader.readAll(buf, offset, len);
         if (nread != len) {

@@ -1907,7 +1907,9 @@ public abstract class Server {
 
       Span traceSpan = null;
 
-      if (header.hasTraceInfo() && header.getTraceInfo() != null && header.getTraceInfo().hasTraceId()) {
+      if (header.hasTraceInfo() &&
+          (header.getTraceInfo() != null) && 
+          header.getTraceInfo().hasTraceId()) {
         String traceDescription = rpcRequest.toString();
 
         // If the incoming RPC included tracing info, always continue the trace

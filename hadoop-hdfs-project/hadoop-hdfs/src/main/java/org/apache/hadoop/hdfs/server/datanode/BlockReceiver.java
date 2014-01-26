@@ -964,7 +964,9 @@ class BlockReceiver implements Closeable {
      */
     @Override
     public void run() {
-      Trace.continueSpan(traceSpan);
+      if (traceSpan != null) {
+        Trace.continueSpan(traceSpan);
+      }
       boolean lastPacketInBlock = false;
       final long startTime = ClientTraceLog.isInfoEnabled() ? System.nanoTime() : 0;
       while (isRunning() && !lastPacketInBlock) {
