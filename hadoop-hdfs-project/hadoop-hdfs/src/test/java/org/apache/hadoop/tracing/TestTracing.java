@@ -62,11 +62,10 @@ public class TestTracing {
   @Test
   public void testWriteTraceHooks() throws Exception {
     TraceScope ts = Trace.startSpan("testWriteTraceHooks", Sampler.ALWAYS);
-
     Path file = new Path("traceWriteTest.dat");
-    long startTime = System.currentTimeMillis();
+    long startTime0 = System.currentTimeMillis();
     FSDataOutputStream stream = dfs.create(file);
-
+    long startTime1 = System.currentTimeMillis();
 
     for (int i = 0; i < 10; i++) {
       byte[] data = RandomStringUtils.randomAlphabetic(102400).getBytes();
@@ -74,10 +73,11 @@ public class TestTracing {
     }
     stream.hflush();
     Thread.sleep(10);
+    long endTime0 = System.currentTimeMillis();
     stream.close();
     Thread.sleep(10);
     ts.close();
-    long endTime = System.currentTimeMillis();
+    long endTime1 = System.currentTimeMillis();
 
     // There should be ~80 but leave some room so that this doesn't
     // have to be edited if anything is changed.
@@ -99,11 +99,12 @@ public class TestTracing {
     Map<String, List<Span>> map = SetSpanReceiver.SetHolder.getMap();
     Span s = map.get("DFSOutputStream").get(0);
     Assert.assertNotNull(s);
-
     long spanStart = s.getStartTimeMillis();
     long spanEnd = s.getStopTimeMillis();
-    Assert.assertTrue(spanStart - 20 < startTime);
-    Assert.assertTrue(spanEnd + 20 > endTime);
+    Assert.assertTrue(startTime0 < spanStart);
+    Assert.assertTrue(spanStart < startTime1);
+    Assert.assertTrue(endTime0 < spanEnd);
+    Assert.assertTrue(spanEnd < endTime1);
 
 
     // There should only be one trace id as it should all be homed in the

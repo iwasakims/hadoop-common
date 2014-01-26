@@ -1264,7 +1264,6 @@ public class DFSOutputStream extends FSOutputSummer
             IOUtils.closeStream(blockReplyStream);
             blockReplyStream = null;
           }
-
           if (span != null) span.stop();
         }
         return result;
@@ -1429,7 +1428,6 @@ public class DFSOutputStream extends FSOutputSummer
     computePacketChunkSize(dfsClient.getConf().writePacketSize,
         checksum.getBytesPerChecksum());
 
-
     streamer = new DataStreamer();
     if (favoredNodes != null && favoredNodes.length != 0) {
       streamer.setFavoredNodes(favoredNodes);
@@ -1465,17 +1463,12 @@ public class DFSOutputStream extends FSOutputSummer
                                      UnresolvedPathException.class,
                                      SnapshotAccessControlException.class);
     }
-
-
-
     final DFSOutputStream out = new DFSOutputStream(dfsClient, src, stat,
         flag, progress, checksum, favoredNodes);
     if (traceScope != null) {
       out.traceSpan = traceScope.detach();
     }
-
     out.start();
-
     return out;
   }
 

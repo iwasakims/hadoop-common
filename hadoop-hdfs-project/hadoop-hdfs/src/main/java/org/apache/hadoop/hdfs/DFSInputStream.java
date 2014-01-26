@@ -95,7 +95,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
   private long blockEnd = -1;
   private CachingStrategy cachingStrategy;
   private final ReadStatistics readStatistics = new ReadStatistics();
-  private final Span traceSpan;
+  private Span traceSpan = null;
 
   /**
    * Track the ByteBuffers that we have handed out to readers.
@@ -223,9 +223,15 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
     this.src = src;
     this.cachingStrategy =
         dfsClient.getDefaultReadCachingStrategy();
-    this.traceSpan = Trace.currentSpan();
+    TraceScope traceScope = null;
+    if (Trace.isTracing()) {
+      traceScope = Trace.startSpan("DFSInputStream");
+      traceScope.getSpan().addTimelineAnnotation("Opening file " + src);
+    }
     openInfo();
-
+    if (traceScope != null) {
+      this.traceSpan = traceScope.detach();
+    }
   }
 
   /**
