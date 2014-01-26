@@ -272,7 +272,7 @@ class BlockReceiver implements Closeable {
   @Override
   public void close() throws IOException {
     if (traceSpan != null) {
-      traceSpan.addTimelineAnnotation("J");
+      traceSpan.addTimelineAnnotation("Closing files");
     }
     if (packetReceiver != null) {
       packetReceiver.close();

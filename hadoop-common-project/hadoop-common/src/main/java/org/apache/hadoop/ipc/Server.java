@@ -1913,10 +1913,10 @@ public abstract class Server {
         String traceDescription = rpcRequest.toString();
 
         // If the incoming RPC included tracing info, always continue the trace
-          TraceInfo parentSpan = new TraceInfo(header.getTraceInfo().getTraceId(),
-              header.getTraceInfo().getParentId());
-          traceSpan = Trace.startSpan(traceDescription, parentSpan).detach();
-        }
+        TraceInfo parentSpan = new TraceInfo(header.getTraceInfo().getTraceId(),
+                                             header.getTraceInfo().getParentId());
+        traceSpan = Trace.startSpan(traceDescription, parentSpan).detach();
+      }
 
       Call call = new Call(header.getCallId(), header.getRetryCount(),
           rpcRequest, this, ProtoUtil.convert(header.getRpcKind()), header

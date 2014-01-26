@@ -196,16 +196,14 @@ public class ProtobufRpcEngine implements RpcEngine {
             + method.getName() + "]");
       }
 
-      TraceScope traceSpan = null;
-
+      TraceScope traceScope = null;
       // if Tracing is on then start a new span for this rpc.
       // guard it in the if statement to make sure there isn't
       // any extra string manipulation.
       if (Trace.isTracing()) {
-        traceSpan = Trace.startSpan(
-          method.getDeclaringClass().getCanonicalName() +
-          "." +
-          method.getName());
+        traceScope = Trace.startSpan(
+            method.getDeclaringClass().getCanonicalName() +
+            "." + method.getName());
       }
 
       RequestHeaderProto rpcRequestHeader = constructRpcRequestHeader(method);
@@ -230,12 +228,12 @@ public class ProtobufRpcEngine implements RpcEngine {
                 " {" + e + "}");
         }
         if (Trace.isTracing()) {
-          traceSpan.getSpan().addTimelineAnnotation(
+          traceScope.getSpan().addTimelineAnnotation(
               "Call got exception: " + e.getMessage());
         }
         throw new ServiceException(e);
       } finally {
-        if (traceSpan != null) traceSpan.close();
+        if (traceScope != null) traceScope.close();
       }
 
       if (LOG.isDebugEnabled()) {
