@@ -1629,7 +1629,7 @@ public class DFSOutputStream extends FSOutputSummer
       waitAndQueueCurrentPacket();
 
       // If the reopened file did not end at chunk boundary and the above
-      // write filled up its partial chunk. Tell the summer to generate full
+      // write filled up its partial chunk. Tell the summer to generate full 
       // crc chunks from now on.
       if (appendChunk && bytesCurBlock%bytesPerChecksum == 0) {
         appendChunk = false;
@@ -1642,11 +1642,11 @@ public class DFSOutputStream extends FSOutputSummer
         computePacketChunkSize(psize, bytesPerChecksum);
       }
       //
-      // if encountering a block boundary, send an empty packet to
+      // if encountering a block boundary, send an empty packet to 
       // indicate the end of block and reset bytesCurBlock.
       //
       if (bytesCurBlock == blockSize) {
-        currentPacket = new Packet(0, 0, bytesCurBlock,
+        currentPacket = new Packet(0, 0, bytesCurBlock, 
             currentSeqno++, this.checksum.getChecksumSize());
         currentPacket.lastPacketInBlock = true;
         currentPacket.syncBlock = shouldSyncBlock;
