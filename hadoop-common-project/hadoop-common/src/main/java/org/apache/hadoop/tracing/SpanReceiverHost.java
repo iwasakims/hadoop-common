@@ -35,29 +35,24 @@ import com.google.common.base.Preconditions;
 
 /**
  * This class provides functions for reading the names of SpanReceivers from
- * the Hadoop configuration, adding those SpanReceivers to the Tracer, and closing those
- * SpanReceivers when appropriate.
+ * the Hadoop configuration, adding those SpanReceivers to the Tracer,
+ * and closing those SpanReceivers when appropriate.
+ * This class do nothing If no SpanReceiver is configured .
  */
 @InterfaceAudience.Private
 public class SpanReceiverHost {
   public static final String SPAN_RECEIVERS_CONF_KEY = "hadoop.trace.spanreceiver.classes";
   private static final Log LOG = LogFactory.getLog(SpanReceiverHost.class);
-  private Collection<SpanReceiver> receivers;
-  private Configuration conf;
+  private Collection<SpanReceiver> receivers = new HashSet<SpanReceiver>();
   
   private static SpanReceiverHost singletonInstance;
 
-  private SpanReceiverHost(Configuration conf) {
-    receivers = new HashSet<SpanReceiver>();
-    this.conf = conf;
-  }
-  
   public static synchronized void init(Configuration conf) {
     if (singletonInstance != null) return;
     Preconditions.checkNotNull(conf);
     LOG.info("Initializing htrace span receivers");
-    singletonInstance = new SpanReceiverHost(conf);
-    singletonInstance.loadSpanReceivers();
+    singletonInstance = new SpanReceiverHost();
+    singletonInstance.loadSpanReceivers(conf);
     
     ShutdownHookManager.get().addShutdownHook(new Runnable() {
       public void run() {
@@ -76,7 +71,7 @@ public class SpanReceiverHost {
    * called on them. This allows SpanReceivers to use values from the Hadoop
    * configuration.
    */
-  public void loadSpanReceivers() {
+  public void loadSpanReceivers(Configuration conf) {
     Class<?> implClass = null;
     String[] receiverNames = conf.getTrimmedStrings(SPAN_RECEIVERS_CONF_KEY);
     if (receiverNames == null || receiverNames.length == 0) {
@@ -87,7 +82,7 @@ public class SpanReceiverHost {
 
       try {
         implClass = Class.forName(className);
-        receivers.add(loadInstance(implClass));
+        receivers.add(loadInstance(implClass, conf));
         LOG.info("SpanReceiver " + className + " was loaded successfully.");
       } catch (ClassNotFoundException e) {
         LOG.warn("Class " + className + " cannot be found.", e);
@@ -100,7 +95,7 @@ public class SpanReceiverHost {
     }
   }
 
-  private SpanReceiver loadInstance(Class<?> implClass)
+  private SpanReceiver loadInstance(Class<?> implClass, Configuration conf)
       throws IOException {
     SpanReceiver impl;
     try {

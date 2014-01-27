@@ -94,8 +94,9 @@ public class FsShell extends Configured implements Tool {
       commandFactory.addObject(new Usage(), "-usage");
       registerCommands(commandFactory);
     }
-    
-    SpanReceiverHost.init(getConf());
+    if (Trace.isTracing()) {
+      SpanReceiverHost.init(getConf());
+    }
   }
 
   protected void registerCommands(CommandFactory factory) {
