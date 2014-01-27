@@ -71,11 +71,12 @@ public abstract class DataTransferProtoUtil {
 
   static ClientOperationHeaderProto buildClientHeader(ExtendedBlock blk,
       String client, Token<BlockTokenIdentifier> blockToken) {
-    ClientOperationHeaderProto.Builder builder =
+    ClientOperationHeaderProto header =
       ClientOperationHeaderProto.newBuilder()
         .setBaseHeader(buildBaseHeader(blk, blockToken))
-        .setClientName(client);
-    return builder.build();
+        .setClientName(client)
+        .build();
+    return header;
   }
 
   static BaseHeaderProto buildBaseHeader(ExtendedBlock blk,
@@ -89,7 +90,6 @@ public abstract class DataTransferProtoUtil {
           .setTraceId(s.getTraceId())
           .setParentSpanId(s.getSpanId()));
     }
-
     return builder.build();
   }
 
