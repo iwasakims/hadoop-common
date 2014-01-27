@@ -173,7 +173,6 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.security.token.TokenRenewer;
-import org.apache.hadoop.tracing.SpanReceiverHost;
 import org.apache.hadoop.util.DataChecksum;
 import org.apache.hadoop.util.DataChecksum.Type;
 import org.apache.hadoop.util.Progressable;
@@ -535,9 +534,6 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory {
       proxyInfo = NameNodeProxies.createProxyWithLossyRetryHandler(conf,
           nameNodeUri, ClientProtocol.class, numResponseToDrop);
     }
-
-    // Initialize tracing, if configured.
-    SpanReceiverHost.init(conf);
 
     if (proxyInfo != null) {
       this.dtService = proxyInfo.getDelegationTokenService();

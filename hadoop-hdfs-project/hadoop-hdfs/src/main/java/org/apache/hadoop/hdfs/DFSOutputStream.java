@@ -970,7 +970,7 @@ public class DFSOutputStream extends FSOutputSummer
         in = new DataInputStream(unbufIn);
 
         //send the TRANSFER_BLOCK request
-        new Sender(out).transferBlock(block, blockToken, dfsClient.clientName,
+        new Sender(out, traceSpan).transferBlock(block, blockToken, dfsClient.clientName,
             targets);
         out.flush();
 
@@ -1191,7 +1191,7 @@ public class DFSOutputStream extends FSOutputSummer
           //
   
           // send the request
-          new Sender(out).writeBlock(block, accessToken, dfsClient.clientName,
+          new Sender(out, traceSpan).writeBlock(block, accessToken, dfsClient.clientName,
               nodes, null, recoveryFlag? stage.getRecoveryStage() : stage, 
               nodes.length, block.getNumBytes(), bytesSent, newGS, checksum,
               cachingStrategy.get());

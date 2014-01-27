@@ -31,15 +31,8 @@ import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.shell.Command;
 import org.apache.hadoop.fs.shell.CommandFactory;
 import org.apache.hadoop.fs.shell.FsCommand;
-import org.apache.hadoop.tracing.SpanReceiverHost;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
-import org.cloudera.htrace.Sampler;
-import org.cloudera.htrace.Span;
-import org.cloudera.htrace.Trace;
-import org.cloudera.htrace.TraceScope;
-
-import com.google.common.base.Joiner;
 
 /** Provide command line access to a FileSystem. */
 @InterfaceAudience.Private
@@ -93,9 +86,6 @@ public class FsShell extends Configured implements Tool {
       commandFactory.addObject(new Help(), "-help");
       commandFactory.addObject(new Usage(), "-usage");
       registerCommands(commandFactory);
-    }
-    if (Trace.isTracing()) {
-      SpanReceiverHost.init(getConf());
     }
   }
 
@@ -257,12 +247,6 @@ public class FsShell extends Configured implements Tool {
     } else {
       String cmd = argv[0];
       Command instance = null;
-      TraceScope traceScope = null;
-      if (Trace.isTracing()) {
-        traceScope = Trace.startSpan("FsShell command: " +
-                                     Joiner.on(" ").join(argv), 
-                                     Sampler.ALWAYS);
-      }
       try {
         instance = commandFactory.getInstance(cmd);
         if (instance == null) {
@@ -279,8 +263,6 @@ public class FsShell extends Configured implements Tool {
         LOG.debug("Error", e);
         displayError(cmd, "Fatal internal error");
         e.printStackTrace(System.err);
-      } finally {
-        if (traceScope != null) traceScope.close();
       }
     }
     return exitCode;

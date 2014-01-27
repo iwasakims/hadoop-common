@@ -63,7 +63,7 @@ public class SpanReceiverHost {
 
   /**
    * Reads the names of classes specified in the
-   * "hbase.trace.spanreceiver.classes" property and instantiates and registers
+   * "hadoop.trace.spanreceiver.classes" property and instantiates and registers
    * them with the Tracer as SpanReceiver's.
    * 
    * The nullary constructor is called during construction, but if the classes

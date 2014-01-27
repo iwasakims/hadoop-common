@@ -100,9 +100,9 @@ public abstract class Receiver implements DataTransferProtocol {
   /** Receive OP_READ_BLOCK */
   private void opReadBlock() throws IOException {
     OpReadBlockProto proto = OpReadBlockProto.parseFrom(vintPrefixed(in));
-
-    TraceScope scope = Trace.startSpan("Receiver.opReadBlock",
-        fromProto(proto.getHeader().getBaseHeader().getTraceInfo()));
+    TraceScope ts =
+        Trace.startSpan("Receiver.opReadBlock",
+            fromProto(proto.getHeader().getBaseHeader().getTraceInfo()));
     try {
       readBlock(PBHelper.convert(proto.getHeader().getBaseHeader().getBlock()),
         PBHelper.convert(proto.getHeader().getBaseHeader().getToken()),
@@ -114,17 +114,16 @@ public abstract class Receiver implements DataTransferProtocol {
             getCachingStrategy(proto.getCachingStrategy()) :
           CachingStrategy.newDefaultStrategy()));
     } finally {
-        scope.close();
+      ts.close();
     }
   }
   
   /** Receive OP_WRITE_BLOCK */
   private void opWriteBlock(DataInputStream in) throws IOException {
     final OpWriteBlockProto proto = OpWriteBlockProto.parseFrom(vintPrefixed(in));
-
-    TraceScope scope = Trace.startSpan("Receiver.opWriteBlock",
-        fromProto(proto.getHeader().getBaseHeader().getTraceInfo()));
-
+    TraceScope ts =
+        Trace.startSpan("Receiver.opWriteBlock",
+            fromProto(proto.getHeader().getBaseHeader().getTraceInfo()));
     try {
       writeBlock(PBHelper.convert(proto.getHeader().getBaseHeader().getBlock()),
         PBHelper.convert(proto.getHeader().getBaseHeader().getToken()),
@@ -140,7 +139,7 @@ public abstract class Receiver implements DataTransferProtocol {
             getCachingStrategy(proto.getCachingStrategy()) :
           CachingStrategy.newDefaultStrategy()));
     } finally {
-      scope.close();
+      ts.close();
     }
   }
 
@@ -148,16 +147,16 @@ public abstract class Receiver implements DataTransferProtocol {
   private void opTransferBlock(DataInputStream in) throws IOException {
     final OpTransferBlockProto proto =
       OpTransferBlockProto.parseFrom(vintPrefixed(in));
-
-    TraceScope scope = Trace.startSpan("Receiver.opTransferBlock",
-        fromProto(proto.getHeader().getBaseHeader().getTraceInfo()));
+    TraceScope ts =
+        Trace.startSpan("Receiver.opTransferBlock",
+            fromProto(proto.getHeader().getBaseHeader().getTraceInfo()));
     try {
       transferBlock(PBHelper.convert(proto.getHeader().getBaseHeader().getBlock()),
           PBHelper.convert(proto.getHeader().getBaseHeader().getToken()),
           proto.getHeader().getClientName(),
           PBHelper.convert(proto.getTargetsList()));
     } finally {
-      scope.close();
+      ts.close();
     }
   }
 
