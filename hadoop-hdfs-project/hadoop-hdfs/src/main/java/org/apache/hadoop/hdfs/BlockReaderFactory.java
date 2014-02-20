@@ -157,7 +157,7 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
   private int remainingCacheTries;
 
   /**
-   * Trancing information of HTrace, if exists.
+   * Tracing information of HTrace, if exists.
    */
   private Span parentSpan;
 

@@ -37,7 +37,7 @@ import com.google.common.base.Preconditions;
  * This class provides functions for reading the names of SpanReceivers from
  * the Hadoop configuration, adding those SpanReceivers to the Tracer,
  * and closing those SpanReceivers when appropriate.
- * This class do nothing If no SpanReceiver is configured .
+ * This class do nothing If no SpanReceiver is configured.
  */
 @InterfaceAudience.Private
 public class SpanReceiverHost {

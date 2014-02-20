@@ -54,6 +54,7 @@ import org.apache.hadoop.util.DataChecksum;
 import org.apache.hadoop.util.StringUtils;
 import org.cloudera.htrace.Span;
 import org.cloudera.htrace.Trace;
+import org.cloudera.htrace.TraceScope;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -329,7 +330,7 @@ class BlockReceiver implements Closeable {
       datanode.metrics.addFlushNanos(flushTotalNanos);
     }
     if (traceSpan != null) {
-      traceSpan.addTimelineAnnotation("closed");
+      traceSpan.addTimelineAnnotation("Closed");
     }
     // disk check
     if(ioe != null) {
@@ -961,8 +962,9 @@ class BlockReceiver implements Closeable {
      */
     @Override
     public void run() {
+      TraceScope traceScope = null;
       if (traceSpan != null) {
-        Trace.continueSpan(traceSpan);
+        traceScope = Trace.startSpan("PacketResponder", traceSpan);
       }
       boolean lastPacketInBlock = false;
       final long startTime = ClientTraceLog.isInfoEnabled() ? System.nanoTime() : 0;
@@ -1080,6 +1082,7 @@ class BlockReceiver implements Closeable {
           }
         }
       }
+      if (traceScope != null) traceScope.close();
       LOG.info(myString + " terminating");
     }
     

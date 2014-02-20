@@ -485,19 +485,16 @@ public class JournalSet implements JournalManager {
         public void apply(JournalAndStream jas) throws IOException {
           if (jas.isActive()) {
             TraceScope scope = null;
-
-            if (Trace.isTracing()) {
-              scope = Trace.startSpan("JournalSet.flushAndSync");
-              scope.getSpan().addKVAnnotation(
-                  "manager".getBytes(),
-                  jas.getManager().toString().getBytes());
-
-              scope.getSpan().addKVAnnotation(
-                  "stream".getBytes(),
-                  jas.getCurrentStream().toString().getBytes());
-            }
-
             try {
+              if (Trace.isTracing()) {
+                scope = Trace.startSpan("JournalSet.flushAndSync");
+                scope.getSpan().addKVAnnotation(
+                    "manager".getBytes(),
+                    jas.getManager().toString().getBytes());
+                scope.getSpan().addKVAnnotation(
+                    "stream".getBytes(),
+                    jas.getCurrentStream().toString().getBytes());
+              }
               jas.getCurrentStream().flushAndSync(durable);
             } finally {
               if (scope != null) scope.close();
@@ -514,19 +511,16 @@ public class JournalSet implements JournalManager {
         public void apply(JournalAndStream jas) throws IOException {
           if (jas.isActive()) {
             TraceScope scope = null;
-
-            if (Trace.isTracing()) {
-              scope = Trace.startSpan("JournalSet.flushAndSync");
-              scope.getSpan().addKVAnnotation(
-                  "manager".getBytes(),
-                  jas.getManager().toString().getBytes());
-
-              scope.getSpan().addKVAnnotation(
-                  "stream".getBytes(),
-                  jas.getCurrentStream().toString().getBytes());
-            }
-
             try {
+              if (Trace.isTracing()) {
+                scope = Trace.startSpan("JournalSet.flushAndSync");
+                scope.getSpan().addKVAnnotation(
+                    "manager".getBytes(),
+                    jas.getManager().toString().getBytes());
+                scope.getSpan().addKVAnnotation(
+                    "stream".getBytes(),
+                    jas.getCurrentStream().toString().getBytes());
+              }
               jas.getCurrentStream().flush();
             } finally {
               if (scope != null) scope.close();

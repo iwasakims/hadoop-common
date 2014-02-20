@@ -2165,7 +2165,7 @@ public abstract class Server {
         } catch (Exception e) {
           LOG.info(Thread.currentThread().getName() + " caught an exception", e);
           if (Trace.isTracing()) {
-            traceScope.getSpan().addTimelineAnnotation("exception: " +
+            traceScope.getSpan().addTimelineAnnotation("Exception: " +
                 StringUtils.stringifyException(e));
           }
         } finally {

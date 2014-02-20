@@ -1165,7 +1165,7 @@ public class DFSOutputStream extends FSOutputSummer
         Span span = null;
         if (traceSpan != null) {
           span =  traceSpan.child("DFSOutputStream.createBlockOutputStream");
-          span.addTimelineAnnotation("setup pipeline for " + block);
+          span.addTimelineAnnotation("Setup pipeline for " + block);
         }
         try {
           assert null == s : "Previous socket unclosed";
@@ -1255,7 +1255,7 @@ public class DFSOutputStream extends FSOutputSummer
         } finally {
           if (!result) {
             if (span != null) {
-              span.addTimelineAnnotation("failed");
+              span.addTimelineAnnotation("Failed");
             }
             IOUtils.closeSocket(s);
             s = null;
