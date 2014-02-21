@@ -1558,23 +1558,6 @@ public class DFSOutputStream extends FSOutputSummer
       }
     }
   }
-  // @see FSOutputSummer#write()
-  @Override
-  public synchronized void write(byte b[], int off, int len)
-      throws IOException {
-    TraceScope innerTraceScope = null;
-
-    if (traceSpan != null) {
-      innerTraceScope = Trace.continueSpan(traceSpan.child("DFSOutputStream.write"));
-    }
-
-    try {
-      super.write(b, off, len);
-    } finally {
-      if (innerTraceScope != null) innerTraceScope.close();
-    }
-
-  }
 
   // @see FSOutputSummer#writeChunk()
   @Override

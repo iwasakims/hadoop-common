@@ -857,31 +857,13 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
   @Override
   public synchronized int read(final byte buf[], int off, int len) throws IOException {
     ReaderStrategy byteArrayReader = new ByteArrayStrategy(buf);
-    TraceScope innerTraceScope = null;
-    if (traceSpan != null) {
-      innerTraceScope = Trace.continueSpan(traceSpan.child("DFSInputStream.read"));
-      innerTraceScope.getSpan().addTimelineAnnotation("Strategy = ByteArrayStrategy");
-    }
-    try {
-      return readWithStrategy(byteArrayReader, off, len);
-    } finally {
-      if (innerTraceScope != null) innerTraceScope.close();
-    }
+    return readWithStrategy(byteArrayReader, off, len);
   }
 
   @Override
   public synchronized int read(final ByteBuffer buf) throws IOException {
     ReaderStrategy byteBufferReader = new ByteBufferStrategy(buf);
-    TraceScope innerTraceScope = null;
-    if (traceSpan != null) {
-      innerTraceScope = Trace.continueSpan(traceSpan.child("DFSInputStream.read"));
-      innerTraceScope.getSpan().addTimelineAnnotation("Strategy = ByteBufferStrategy");
-    }
-    try {
-      return readWithStrategy(byteBufferReader, 0, buf.remaining());
-    } finally {
-      if (innerTraceScope != null) innerTraceScope.close();
-    }
+    return readWithStrategy(byteBufferReader, 0, buf.remaining());
   }
 
 

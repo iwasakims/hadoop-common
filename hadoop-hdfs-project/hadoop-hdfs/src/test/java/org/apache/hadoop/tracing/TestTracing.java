@@ -88,8 +88,6 @@ public class TestTracing {
     String[] expectedSpanNames = {
         "testWriteTraceHooks",
         "DFSOutputStream",
-        "DFSOutputStream.write",
-        "DFSOutputStream.flushOrSync",
         "DFSOutputStream.close",
     };
 
@@ -153,7 +151,6 @@ public class TestTracing {
     String[] expectedSpanNames = {
         "testReadTraceHooks",
         "DFSInputStream",
-        "DFSInputStream.read",
         "DFSInputStream.close",
     };
 

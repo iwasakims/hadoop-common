@@ -757,8 +757,7 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
   }
 
   @SuppressWarnings("deprecation")
-  private BlockReader getRemoteBlockReader(Peer peer)
-    throws IOException {
+  private BlockReader getRemoteBlockReader(Peer peer) throws IOException {
     if (conf.useLegacyBlockReader) {
       return RemoteBlockReader.newBlockReader(fileName,
           block, token, startOffset, length, conf.ioBufferSize,
