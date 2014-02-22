@@ -88,7 +88,11 @@ public class TestTracing {
     String[] expectedSpanNames = {
         "testWriteTraceHooks",
         "DFSOutputStream",
+        "DFSOutputStream.createBlockOutputStream",
         "DFSOutputStream.close",
+        "Sender.writeBlock",
+        "Receiver.opWriteBlock",
+        "PacketResponder"
     };
 
     assertSpanNamesFound(expectedSpanNames);
@@ -152,8 +156,10 @@ public class TestTracing {
         "testReadTraceHooks",
         "DFSInputStream",
         "DFSInputStream.close",
+        "Sender.readBlock",
+        "Receiver.opReadBlock",
     };
-
+    
     assertSpanNamesFound(expectedSpanNames);
 
     // The trace should last about the same amount of time as the test
