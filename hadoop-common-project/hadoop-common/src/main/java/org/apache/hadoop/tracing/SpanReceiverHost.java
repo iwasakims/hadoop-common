@@ -27,9 +27,9 @@ import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.ShutdownHookManager;
-import org.cloudera.htrace.HTraceConfiguration;
-import org.cloudera.htrace.SpanReceiver;
-import org.cloudera.htrace.Trace;
+import org.htrace.HTraceConfiguration;
+import org.htrace.SpanReceiver;
+import org.htrace.Trace;
 
 import com.google.common.base.Preconditions;
 

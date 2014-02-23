@@ -51,7 +51,7 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.Time;
-import org.cloudera.htrace.Span;
+import org.htrace.Span;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 

@@ -38,8 +38,8 @@ import org.apache.hadoop.hdfs.server.common.StorageInfo;
 import org.apache.hadoop.hdfs.server.protocol.NamespaceInfo;
 import org.apache.hadoop.hdfs.server.protocol.RemoteEditLog;
 import org.apache.hadoop.hdfs.server.protocol.RemoteEditLogManifest;
-import org.cloudera.htrace.Trace;
-import org.cloudera.htrace.TraceScope;
+import org.htrace.Trace;
+import org.htrace.TraceScope;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ComparisonChain;

@@ -35,8 +35,8 @@ import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.CachingStrategyP
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.OpWriteBlockProto;
 import org.apache.hadoop.hdfs.protocolPB.PBHelper;
 import org.apache.hadoop.hdfs.server.datanode.CachingStrategy;
-import org.cloudera.htrace.Trace;
-import org.cloudera.htrace.TraceScope;
+import org.htrace.Trace;
+import org.htrace.TraceScope;
 
 /** Receiver */
 @InterfaceAudience.Private

@@ -53,7 +53,7 @@ import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.DataChecksum;
 
 import com.google.common.annotations.VisibleForTesting;
-import org.cloudera.htrace.Span;
+import org.htrace.Span;
 
 /**
  * This is a wrapper around connection to datanode

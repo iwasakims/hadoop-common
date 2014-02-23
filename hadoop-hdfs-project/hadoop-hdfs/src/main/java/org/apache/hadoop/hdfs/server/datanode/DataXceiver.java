@@ -73,7 +73,7 @@ import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.DataChecksum;
-import org.cloudera.htrace.Trace;
+import org.htrace.Trace;
 
 import com.google.protobuf.ByteString;
 

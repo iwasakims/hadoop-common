@@ -50,9 +50,9 @@ import org.apache.hadoop.security.token.TokenIdentifier;
 import org.apache.hadoop.util.ProtoUtil;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
-import org.cloudera.htrace.Sampler;
-import org.cloudera.htrace.Trace;
-import org.cloudera.htrace.TraceScope;
+import org.htrace.Sampler;
+import org.htrace.Trace;
+import org.htrace.TraceScope;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.BlockingService;

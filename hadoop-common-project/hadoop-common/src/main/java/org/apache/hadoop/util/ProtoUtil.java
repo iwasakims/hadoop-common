@@ -27,8 +27,8 @@ import org.apache.hadoop.ipc.protobuf.IpcConnectionContextProtos.UserInformation
 import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.*;
 import org.apache.hadoop.security.SaslRpcServer.AuthMethod;
 import org.apache.hadoop.security.UserGroupInformation;
-import org.cloudera.htrace.Span;
-import org.cloudera.htrace.Trace;
+import org.htrace.Span;
+import org.htrace.Trace;
 
 import com.google.protobuf.ByteString;
 

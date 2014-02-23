@@ -31,8 +31,8 @@ import org.apache.hadoop.hdfs.protocolPB.PBHelper;
 import org.apache.hadoop.hdfs.security.token.block.BlockTokenIdentifier;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.DataChecksum;
-import org.cloudera.htrace.Span;
-import org.cloudera.htrace.Trace;
+import org.htrace.Span;
+import org.htrace.Trace;
 
 
 /**
@@ -93,10 +93,10 @@ public abstract class DataTransferProtoUtil {
     return builder.build();
   }
 
-  public static org.cloudera.htrace.TraceInfo fromProto(TraceInfo proto) {
+  public static org.htrace.TraceInfo fromProto(TraceInfo proto) {
     if (proto == null) return null;
     if (!proto.hasTraceId()) return null;
-    return new org.cloudera.htrace.TraceInfo(proto.getTraceId(),
+    return new org.htrace.TraceInfo(proto.getTraceId(),
         proto.getParentSpanId());
   }
 }
