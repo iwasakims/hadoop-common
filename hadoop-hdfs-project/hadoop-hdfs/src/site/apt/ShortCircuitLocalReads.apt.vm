@@ -21,7 +21,9 @@ HDFS Short-Circuit Local Reads
 
 %{toc|section=1|fromDepth=0}
 
-* Background
+* {Short-Circuit Local Reads}
+
+** Background
 
   In <<<HDFS>>>, reads normally go through the <<<DataNode>>>.  Thus, when the
   client asks the <<<DataNode>>> to read a file, the <<<DataNode>>> reads that
@@ -31,7 +33,7 @@ HDFS Short-Circuit Local Reads
   the client is co-located with the data.  Short-circuit reads provide a
   substantial performance boost to many applications.
 
-* Setup
+** Setup
 
   To enable short-circuit local reads, you will need to enable
   <<<libhadoop.so>>>.  See
@@ -48,7 +50,7 @@ HDFS Short-Circuit Local Reads
   Short-circuit local reads need to be configured on both the <<<DataNode>>>
   and the client.
 
-* Example Configuration
+** Example Configuration
 
   Here is an example configuration.
 
@@ -65,7 +67,7 @@ HDFS Short-Circuit Local Reads
 </configuration>
 ----
 
-* {Legacy HDFS Short-Circuit Local Reads}
+* Legacy HDFS Short-Circuit Local Reads
 
   Legacy short-circuit local reads implementation
   on which clients directly open HDFS block files is still available
@@ -75,7 +77,61 @@ HDFS Short-Circuit Local Reads
   Only users listed in the value of
   <<<dfs.block.local-path-access.user>>> can use this feature.
 
-* {Configuration Properties}
+----
+<configuration>
+  <property>
+    <name>dfs.client.read.shortcircuit</name>
+    <value>true</value>
+  </property>
+  <property>
+    <name>dfs.client.use.legacy.blockreader.local</name>
+    <value>true</value>
+  </property>
+  <property>
+    <name>dfs.block.local-path-access.user</name>
+    <value>foo,bar</value>
+  </property>
+</configuration>
+----
+
+* {Zero-Copy Short-Circuit Local Reads}
+
+  <<<HdfsDataInputStream>>> (and <<<DFSInputStream>>>) provides
+  so-called zero-copy feature which is the fast short-circuit local reads
+  avoiding unnecessary data copy in OS kernel.
+  Though (legacy) {{Short-Circuit Local Reads}} is application transparent,
+  {{Zero-Copy Short-Circuit Local Reads}} requires its own client API.
+
+----
+  public ByteBuffer read(ByteBufferPool factory, int maxLength,
+      EnumSet<ReadOption> opts)
+          throws IOException, UnsupportedOperationException;
+
+  public void releaseBuffer(ByteBuffer buffer);
+----
+
+  * <<<read>>> method returns direct ByteBuffer containing file data.
+
+    * By passing
+      {{{../../api/org/apache/hadoop/io/ByteBufferPool.html}<<<ByteBufferPool>>>}}
+      implementation as factory argument,
+      it fallbacks to normal read path when zero-copy is not available.
+      Read data into ByteBuffer got from pool
+  
+    * If factory argument is null,
+      <<<UnsupportedOperationException>>> will be thrown
+      when zero-copy is not available.
+  
+  * Client must close used ByteBuffer by calling <<<releaseBuffer>>> method.
+
+  See also Javadocs of 
+  {{{../../api/org/apache/hadoop/fs/FSDataInputStream.html#read(org.apache.hadoop.io.ByteBufferPool,%20int,%20java.util.EnumSet)}<<<read(ByteBufferPool bufferPool, int maxLength, EnumSet<ReadOption> opts) >>>}}
+  and
+  {{{../../api/org/apache/hadoop/fs/FSDataInputStream.html#releaseBuffer(java.nio.ByteBuffer)}<<<releaseBuffer(ByteBuffer buffer) >>>}}
+  method.
+
+
+* Configuration Properties
 
 *-------------------------+-------------------------+------------------------+
 || Key                    || Default Value          || Notes                 |
@@ -89,6 +145,7 @@ HDFS Short-Circuit Local Reads
 | <<<dfs.client.domain.socket.data.traffic>>> | <false> | |
 | | | This control whether we will try to pass normal data traffic |
 | | | over UNIX domain socket rather than over TCP socket. |
+| | | This is experimental feature now and is turned off by default. |
 *-------------------------+-------------------------+------------------------+
 | <<<dfs.client.read.shortcircuit.skip.checksum>>> | <false> | |
 | | | If this configuration parameter is set, |
@@ -113,15 +170,6 @@ HDFS Short-Circuit Local Reads
 | <<<dfs.client.read.shortcircuit.buffer.size>>> | <false> | |
 | | | This configuration parameter turns on short-circuit local reads. |
 *-------------------------+-------------------------+------------------------+
-| <<<dfs.client.mmap.cache.size>>> | <256> | |
-| | | ... |
-*-------------------------+-------------------------+------------------------+
-| <<<dfs.client.mmap.cache.timeout.ms>>> | <3600000> | |
-| | | ... |
-*-------------------------+-------------------------+------------------------+
-| <<<dfs.client.mmap.retry.timeout.ms>>> | <300000> | |
-| | | ... |
-*-------------------------+-------------------------+------------------------+
 | <<<dfs.client.short.circuit.replica.stale.threshold.ms>>> | <1800000> | |
 | | | How long replicas in the cache before declaring them to be stale. |
 *-------------------------+-------------------------+------------------------+
@@ -134,4 +182,13 @@ HDFS Short-Circuit Local Reads
 | <<<dfs.block.local-path-access.user>>> | <> | |
 | | | Comma separated list of users allowd to open block files |
 | | | on Legach short-circuit local read. |
+*-------------------------+-------------------------+------------------------+
+| <<<dfs.client.mmap.cache.size>>> | <256> | |
+| | | ... |
+*-------------------------+-------------------------+------------------------+
+| <<<dfs.client.mmap.cache.timeout.ms>>> | <3600000> | |
+| | | ... |
+*-------------------------+-------------------------+------------------------+
+| <<<dfs.client.mmap.retry.timeout.ms>>> | <300000> | |
+| | | ... |
 *-------------------------+-------------------------+------------------------+
