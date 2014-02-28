@@ -44,7 +44,7 @@ HDFS Short-Circuit Local Reads
   in the filesystem that allows the client and the DataNodes to communicate.
   You will need to set a path to this socket.  The DataNode needs to be able to
   create this path.  On the other hand, it should not be possible for any user
-  except the hdfs user or root to create this path.  For this reason, paths
+  except the HDFS user or root to create this path.  For this reason, paths
   under <<</var/run>>> or <<</var/lib>>> are often used.
 
   Short-circuit local reads need to be configured on both the <<<DataNode>>>
@@ -98,9 +98,10 @@ HDFS Short-Circuit Local Reads
 
   <<<HdfsDataInputStream>>> (and <<<DFSInputStream>>>) provides
   so-called zero-copy feature which is the fast short-circuit local reads
-  avoiding unnecessary data copy in OS kernel.
+  avoiding unnecessary data copy in OS kernel by using mmap.
   Though (legacy) {{Short-Circuit Local Reads}} is application transparent,
-  {{Zero-Copy Short-Circuit Local Reads}} requires its own client API.
+  {{Zero-Copy Short-Circuit Local Reads}} requires its own client API
+  shown below.
 
 ----
   public ByteBuffer read(ByteBufferPool factory, int maxLength,
@@ -110,28 +111,36 @@ HDFS Short-Circuit Local Reads
   public void releaseBuffer(ByteBuffer buffer);
 ----
 
-  * <<<read>>> method returns direct ByteBuffer containing file data.
+  <<<read>>> method returns direct ByteBuffer containing file data.
 
-    * By passing
-      {{{../../api/org/apache/hadoop/io/ByteBufferPool.html}<<<ByteBufferPool>>>}}
-      implementation as factory argument,
-      it fallbacks to normal read path when zero-copy is not available.
-      Read data into ByteBuffer got from pool
+  * By passing
+    {{{../../api/org/apache/hadoop/io/ByteBufferPool.html}<<<ByteBufferPool>>>}}
+    implementation as factory argument,
+    it fallbacks to normal read path when zero-copy is not available and
+    ByteBuffer got from pool containing read data.
+
+  * If factory argument is null,
+    <<<UnsupportedOperationException>>> will be thrown
+    when zero-copy is not available.
+
+  * Zero-copy read is used only in skipping checksum mode,
+    i.e. opts contains <<<ReadOption.SKIP_CHECKSUMS>>> or
+    <<<dfs.client.read.shortcircuit.skip.checksum>>> is set to true.
   
-    * If factory argument is null,
-      <<<UnsupportedOperationException>>> will be thrown
-      when zero-copy is not available.
-  
-  * Client must close used ByteBuffer by calling <<<releaseBuffer>>> method.
+  Client must close used ByteBuffer by calling <<<releaseBuffer>>> method.
 
-  See also Javadocs of 
-  {{{../../api/org/apache/hadoop/fs/FSDataInputStream.html#read(org.apache.hadoop.io.ByteBufferPool,%20int,%20java.util.EnumSet)}<<<read(ByteBufferPool bufferPool, int maxLength, EnumSet<ReadOption> opts) >>>}}
-  and
-  {{{../../api/org/apache/hadoop/fs/FSDataInputStream.html#releaseBuffer(java.nio.ByteBuffer)}<<<releaseBuffer(ByteBuffer buffer) >>>}}
-  method.
-
+  See also 
+  {{{../../api/org/apache/hadoop/fs/FSDataInputStream.html}
+  Javadoc of
+  <<<read(ByteBufferPool bufferPool, int maxLength, EnumSet<ReadOption> opts)>>>
+  method and <<<releaseBuffer(ByteBuffer buffer)>>> method}}.
 
 * Configuration Properties
+
+  Information used by short-circuit read is cached in client
+  beyond life spans of each InputStreams.
+  There are some configuration parameters to control the size of
+  this client cache.
 
 *-------------------------+-------------------------+------------------------+
 || Key                    || Default Value          || Notes                 |
@@ -164,11 +173,11 @@ HDFS Short-Circuit Local Reads
 *-------------------------+-------------------------+------------------------+
 | <<<dfs.client.read.shortcircuit.streams.cache.expiry.ms>>> | <300000> | |
 | | | This controls the minimum amount of time |
-| | | file descriptors need to sit in the FileInputStreamCache |
+| | | file descriptors need to sit in the client cache context |
 | | | before they can be closed for being inactive for too long. |
 *-------------------------+-------------------------+------------------------+
-| <<<dfs.client.read.shortcircuit.buffer.size>>> | <false> | |
-| | | This configuration parameter turns on short-circuit local reads. |
+| <<<dfs.client.read.shortcircuit.buffer.size>>> | <1048576> | |
+| | | The size of direct ByteBuffer used by short-circuit read in bytes. |
 *-------------------------+-------------------------+------------------------+
 | <<<dfs.client.short.circuit.replica.stale.threshold.ms>>> | <1800000> | |
 | | | How long replicas in the cache before declaring them to be stale. |
@@ -181,14 +190,22 @@ HDFS Short-Circuit Local Reads
 *-------------------------+-------------------------+------------------------+
 | <<<dfs.block.local-path-access.user>>> | <> | |
 | | | Comma separated list of users allowd to open block files |
-| | | on Legach short-circuit local read. |
+| | | on legacy short-circuit local read. |
 *-------------------------+-------------------------+------------------------+
-| <<<dfs.client.mmap.cache.size>>> | <256> | |
-| | | ... |
+| <<<dfs.client.mmap.cache.size>>> | <256> |
+| | | The DFSClient maintains a cache of recently used mmaps of block files | 
+| | | for zero-copy short-circuit local reads along with file descriptors. |
+| | | Though the number of total cache element is controlled by | 
+| | | <<<dfs.client.read.shortcircuit.streams.cache.size>>>, |
+| | | mmaped elements have high retaining priority than non-mmaped elements |
+| | | and have its own maximum cache size. |
 *-------------------------+-------------------------+------------------------+
 | <<<dfs.client.mmap.cache.timeout.ms>>> | <3600000> | |
-| | | ... |
+| | | This controls the minimum amount of time |
+| | | mmaps need to sit in the client cache context |
+| | | before they can be closed for being inactive for too long. |
 *-------------------------+-------------------------+------------------------+
 | <<<dfs.client.mmap.retry.timeout.ms>>> | <300000> | |
-| | | ... |
+| | | The minimum number of milliseconds we'll wait after an unsuccessful |
+| | | mmap attempt before trying again. |
 *-------------------------+-------------------------+------------------------+
