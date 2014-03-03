@@ -35,7 +35,7 @@ HDFS Short-Circuit Local Reads
 
 ** Setup
 
-  To enable short-circuit local reads, you will need to enable
+  To configure short-circuit local reads, you will need to enable
   <<<libhadoop.so>>>.  See
   {{{../hadoop-common/NativeLibraries.html}Native
   Libraries}} for details on enabling this library.
@@ -142,70 +142,48 @@ HDFS Short-Circuit Local Reads
   There are some configuration parameters to control the size of
   this client cache.
 
+*-------------------------+------------------------+
+|| Key                    || Notes                 |
+*-------------------------+------------------------+
+| <<<dfs.client.read.shortcircuit>>> | |
+| | This configuration parameter turns on short-circuit local reads. |
 *-------------------------+-------------------------+------------------------+
-|| Key                    || Default Value          || Notes                 |
+| <<<dfs.domain.socket.path>>> | |
+| | The file path of UNIX domain socket used by short-circuit local read. |
 *-------------------------+-------------------------+------------------------+
-| <<<dfs.client.read.shortcircuit>>> | <false> | |
-| | | This configuration parameter turns on short-circuit local reads. |
+| <<<dfs.client.read.shortcircuit.skip.checksum>>> | |
+| | If this configuration parameter is set, |
+| | short-circuit local reads will skip checksums. |
+| | This is normally not recommended, |
+| | but it may be useful for special setups. |
+| | You might consider using this |
+| | if you are doing your own checksumming outside of HDFS. |
 *-------------------------+-------------------------+------------------------+
-| <<<dfs.domain.socket.path>>> | | |
-| | | The file path of UNIX domain socket used by short-circuit local read. |
+| <<<dfs.client.read.shortcircuit.streams.cache.size>>> | |
+| | The DFSClient maintains a cache of recently opened file descriptors. |
+| | This parameter controls the size of that cache. |
+| | Setting this higher will use more file descriptors, |
+| | but potentially provide better performance on workloads |
+| | involving lots of seeks. |
 *-------------------------+-------------------------+------------------------+
-| <<<dfs.client.domain.socket.data.traffic>>> | <false> | |
-| | | This control whether we will try to pass normal data traffic |
-| | | over UNIX domain socket rather than over TCP socket. |
-| | | This is experimental feature now and is turned off by default. |
+| <<<dfs.client.read.shortcircuit.streams.cache.expiry.ms>>> | |
+| | This controls the minimum amount of time |
+| | file descriptors need to sit in the client cache context |
+| | before they can be closed for being inactive for too long. |
 *-------------------------+-------------------------+------------------------+
-| <<<dfs.client.read.shortcircuit.skip.checksum>>> | <false> | |
-| | | If this configuration parameter is set, |
-| | | short-circuit local reads will skip checksums. |
-| | | This is normally not recommended,
-| | | but it may be useful for special setups. |
-| | | You might consider using this |
-| | | if you are doing your own checksumming outside of HDFS. |
+| <<<dfs.client.use.legacy.blockreader.local>>> | |
+| | Legacy short-circuit reader implementation based on HDFS-2246 is used |
+| | if this configuration parameter is true. |
+| | This is for platforms where the new implementation based on HDFS-347 |
+| | is not available. |
 *-------------------------+-------------------------+------------------------+
-| <<<dfs.client.read.shortcircuit.streams.cache.size>>> | <256> | |
-| | | The DFSClient maintains a cache of recently opened file descriptors. |
-| | | This parameter controls the size of that cache. |
-| | | Setting this higher will use more file descriptors, |
-| | | but potentially provide better performance on workloads |
-| | | involving lots of seeks. |
+| <<<dfs.block.local-path-access.user>>> | |
+| | Comma separated list of users allowd to open block files |
+| | on legacy short-circuit local read. |
 *-------------------------+-------------------------+------------------------+
-| <<<dfs.client.read.shortcircuit.streams.cache.expiry.ms>>> | <300000> | |
-| | | This controls the minimum amount of time |
-| | | file descriptors need to sit in the client cache context |
-| | | before they can be closed for being inactive for too long. |
-*-------------------------+-------------------------+------------------------+
-| <<<dfs.client.read.shortcircuit.buffer.size>>> | <1048576> | |
-| | | The size of direct ByteBuffer used by short-circuit read in bytes. |
-*-------------------------+-------------------------+------------------------+
-| <<<dfs.client.short.circuit.replica.stale.threshold.ms>>> | <1800000> | |
-| | | How long replicas in the cache before declaring them to be stale. |
-*-------------------------+-------------------------+------------------------+
-| <<<dfs.client.use.legacy.blockreader.local>>> | <false> | |
-| | | Legacy short-circuit reader implementation based on HDFS-2246 is used |
-| | | if this configuration parameter is true. |
-| | | This is for platforms where the new implementation based on HDFS-347 |
-| | | is not available. |
-*-------------------------+-------------------------+------------------------+
-| <<<dfs.block.local-path-access.user>>> | <> | |
-| | | Comma separated list of users allowd to open block files |
-| | | on legacy short-circuit local read. |
-*-------------------------+-------------------------+------------------------+
-| <<<dfs.client.mmap.cache.size>>> | <256> |
-| | | The DFSClient maintains a cache of recently used mmaps of block files | 
-| | | for zero-copy short-circuit local reads along with file descriptors. |
-| | | Though the number of total cache element is controlled by | 
-| | | <<<dfs.client.read.shortcircuit.streams.cache.size>>>, |
-| | | mmaped elements have high retaining priority than non-mmaped elements |
-| | | and have its own maximum cache size. |
-*-------------------------+-------------------------+------------------------+
-| <<<dfs.client.mmap.cache.timeout.ms>>> | <3600000> | |
-| | | This controls the minimum amount of time |
-| | | mmaps need to sit in the client cache context |
-| | | before they can be closed for being inactive for too long. |
-*-------------------------+-------------------------+------------------------+
-| <<<dfs.client.mmap.retry.timeout.ms>>> | <300000> | |
-| | | The minimum number of milliseconds we'll wait after an unsuccessful |
-| | | mmap attempt before trying again. |
+| <<<dfs.client.domain.socket.data.traffic>>> | |
+| | This control whether we will try to pass normal data traffic |
+| | over UNIX domain socket rather than over TCP socket |
+| | on node-local data transfer. |
+| | This is experimental feature now and is turned off by default. |
 *-------------------------+-------------------------+------------------------+
