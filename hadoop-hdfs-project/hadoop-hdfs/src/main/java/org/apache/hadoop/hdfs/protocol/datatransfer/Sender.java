@@ -48,16 +48,25 @@ import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.DataChecksum;
 
 import com.google.protobuf.Message;
+import org.htrace.Span;
+import org.htrace.Trace;
+import org.htrace.TraceScope;
 
 /** Sender */
 @InterfaceAudience.Private
 @InterfaceStability.Evolving
 public class Sender implements DataTransferProtocol {
   private final DataOutputStream out;
+  private final Span parentSpan;
+
+  public Sender(final DataOutputStream out, Span parentSpan) {
+    this.out = out;
+    this.parentSpan = parentSpan;
+  }
 
   /** Create a sender for DataTransferProtocol with a output stream. */
   public Sender(final DataOutputStream out) {
-    this.out = out;    
+    this(out, null);
   }
 
   /** Initialize a operation. */
@@ -97,6 +106,10 @@ public class Sender implements DataTransferProtocol {
       final long length,
       final boolean sendChecksum,
       final CachingStrategy cachingStrategy) throws IOException {
+    TraceScope ts = null;
+    if (parentSpan != null) {
+      ts = Trace.continueSpan(parentSpan.child("Sender.readBlock"));
+    }
 
     OpReadBlockProto proto = OpReadBlockProto.newBuilder()
       .setHeader(DataTransferProtoUtil.buildClientHeader(blk, clientName, blockToken))
@@ -106,7 +119,11 @@ public class Sender implements DataTransferProtocol {
       .setCachingStrategy(getCachingStrategy(cachingStrategy))
       .build();
 
-    send(out, Op.READ_BLOCK, proto);
+    try {
+      send(out, Op.READ_BLOCK, proto);
+    } finally {
+      if (ts != null) ts.close();
+    }
   }
   
 
@@ -125,30 +142,36 @@ public class Sender implements DataTransferProtocol {
       final long latestGenerationStamp,
       DataChecksum requestedChecksum,
       final CachingStrategy cachingStrategy) throws IOException {
-    ClientOperationHeaderProto header = DataTransferProtoUtil.buildClientHeader(
-        blk, clientName, blockToken);
-    
-    ChecksumProto checksumProto =
-      DataTransferProtoUtil.toProto(requestedChecksum);
-
-    OpWriteBlockProto.Builder proto = OpWriteBlockProto.newBuilder()
-      .setHeader(header)
-      .setStorageType(PBHelper.convertStorageType(storageType))
-      .addAllTargets(PBHelper.convert(targets, 1))
-      .addAllTargetStorageTypes(PBHelper.convertStorageTypes(targetStorageTypes, 1))
-      .setStage(toProto(stage))
-      .setPipelineSize(pipelineSize)
-      .setMinBytesRcvd(minBytesRcvd)
-      .setMaxBytesRcvd(maxBytesRcvd)
-      .setLatestGenerationStamp(latestGenerationStamp)
-      .setRequestedChecksum(checksumProto)
-      .setCachingStrategy(getCachingStrategy(cachingStrategy));
-    
-    if (source != null) {
-      proto.setSource(PBHelper.convertDatanodeInfo(source));
+    TraceScope ts = null;
+    if (parentSpan != null) {
+      ts = Trace.continueSpan(parentSpan.child("Sender.writeBlock"));
     }
 
-    send(out, Op.WRITE_BLOCK, proto.build());
+    ClientOperationHeaderProto header = DataTransferProtoUtil.buildClientHeader(
+        blk, clientName, blockToken);
+
+    ChecksumProto checksumProto =
+      DataTransferProtoUtil.toProto(requestedChecksum);
+    try {
+      OpWriteBlockProto.Builder proto = OpWriteBlockProto.newBuilder()
+        .setHeader(header)
+        .setStorageType(PBHelper.convertStorageType(storageType))
+        .addAllTargets(PBHelper.convert(targets, 1))
+        .addAllTargetStorageTypes(PBHelper.convertStorageTypes(targetStorageTypes, 1))
+        .setStage(toProto(stage))
+        .setPipelineSize(pipelineSize)
+        .setMinBytesRcvd(minBytesRcvd)
+        .setMaxBytesRcvd(maxBytesRcvd)
+        .setLatestGenerationStamp(latestGenerationStamp)
+        .setRequestedChecksum(checksumProto)
+        .setCachingStrategy(getCachingStrategy(cachingStrategy));
+      
+      if (source != null) {
+        proto.setSource(PBHelper.convertDatanodeInfo(source));
+      send(out, Op.WRITE_BLOCK, proto.build());
+    } finally {
+      if (ts != null) ts.close();
+    }
   }
 
   @Override
@@ -157,6 +180,10 @@ public class Sender implements DataTransferProtocol {
       final String clientName,
       final DatanodeInfo[] targets,
       final StorageType[] targetStorageTypes) throws IOException {
+    TraceScope ts = null;
+    if (parentSpan != null) {
+      ts = Trace.continueSpan(parentSpan.child("Sender.transferBlock"));
+    }
     
     OpTransferBlockProto proto = OpTransferBlockProto.newBuilder()
       .setHeader(DataTransferProtoUtil.buildClientHeader(
@@ -164,14 +191,21 @@ public class Sender implements DataTransferProtocol {
       .addAllTargets(PBHelper.convert(targets))
       .addAllTargetStorageTypes(PBHelper.convertStorageTypes(targetStorageTypes))
       .build();
-
-    send(out, Op.TRANSFER_BLOCK, proto);
+    try {
+      send(out, Op.TRANSFER_BLOCK, proto);
+    } finally {
+      if (ts != null) ts.close();
+    }
   }
 
   @Override
   public void requestShortCircuitFds(final ExtendedBlock blk,
       final Token<BlockTokenIdentifier> blockToken,
       SlotId slotId, int maxVersion) throws IOException {
+    TraceScope ts = null;
+    if (parentSpan != null) {
+      ts = Trace.continueSpan(parentSpan.child("Sender.requestShortCircuitFds"));
+    }
     OpRequestShortCircuitAccessProto.Builder builder =
         OpRequestShortCircuitAccessProto.newBuilder()
           .setHeader(DataTransferProtoUtil.buildBaseHeader(
@@ -180,7 +214,11 @@ public class Sender implements DataTransferProtocol {
       builder.setSlotId(PBHelper.convert(slotId));
     }
     OpRequestShortCircuitAccessProto proto = builder.build();
-    send(out, Op.REQUEST_SHORT_CIRCUIT_FDS, proto);
+    try {
+      send(out, Op.REQUEST_SHORT_CIRCUIT_FDS, proto);
+    } finally {
+      if (ts != null) ts.close();
+    }
   }
   
   @Override
@@ -207,33 +245,59 @@ public class Sender implements DataTransferProtocol {
       final Token<BlockTokenIdentifier> blockToken,
       final String delHint,
       final DatanodeInfo source) throws IOException {
+    TraceScope ts = null;
+    if (parentSpan != null) {
+      ts = Trace.continueSpan(parentSpan.child("Sender.replaceBlock"));
+    }
+
     OpReplaceBlockProto proto = OpReplaceBlockProto.newBuilder()
       .setHeader(DataTransferProtoUtil.buildBaseHeader(blk, blockToken))
       .setStorageType(PBHelper.convertStorageType(storageType))
       .setDelHint(delHint)
       .setSource(PBHelper.convertDatanodeInfo(source))
       .build();
-    
-    send(out, Op.REPLACE_BLOCK, proto);
+
+    try {
+      send(out, Op.REPLACE_BLOCK, proto);
+    } finally {
+      if (ts != null) ts.close();
+    }
   }
 
   @Override
   public void copyBlock(final ExtendedBlock blk,
       final Token<BlockTokenIdentifier> blockToken) throws IOException {
+    TraceScope ts = null;
+    if (Trace.isTracing()) {
+      ts = Trace.startSpan("Sender.copyBlock");
+    }
+
     OpCopyBlockProto proto = OpCopyBlockProto.newBuilder()
       .setHeader(DataTransferProtoUtil.buildBaseHeader(blk, blockToken))
       .build();
-    
-    send(out, Op.COPY_BLOCK, proto);
+
+    try {
+      send(out, Op.COPY_BLOCK, proto);
+    } finally {
+      if (ts != null) ts.close();
+    }
   }
 
   @Override
   public void blockChecksum(final ExtendedBlock blk,
       final Token<BlockTokenIdentifier> blockToken) throws IOException {
+    TraceScope ts = null;
+    if (parentSpan != null) {
+      ts = Trace.continueSpan(parentSpan.child("Sender.blockChecksum"));
+    }
+
     OpBlockChecksumProto proto = OpBlockChecksumProto.newBuilder()
       .setHeader(DataTransferProtoUtil.buildBaseHeader(blk, blockToken))
       .build();
-    
-    send(out, Op.BLOCK_CHECKSUM, proto);
+    try {
+      send(out, Op.BLOCK_CHECKSUM, proto);
+    } finally {
+      if (ts != null) ts.close();
+    }
   }
 }

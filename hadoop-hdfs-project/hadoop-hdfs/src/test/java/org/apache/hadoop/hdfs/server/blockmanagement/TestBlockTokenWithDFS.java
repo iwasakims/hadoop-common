@@ -178,6 +178,7 @@ public class TestBlockTokenWithDFS {
               return peer;
             }
           }).
+          setParentSpan(null).
           build();
     } catch (IOException ex) {
       ioe = ex;

@@ -328,6 +328,7 @@ public class TestDataNodeVolumeFailure {
           return peer;
         }
       }).
+      setParentSpan(null).
       build();
     blockReader.close();
   }

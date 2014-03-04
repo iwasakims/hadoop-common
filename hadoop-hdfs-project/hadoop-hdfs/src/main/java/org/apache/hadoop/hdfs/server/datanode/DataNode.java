@@ -180,6 +180,7 @@ import org.apache.hadoop.util.ServicePlugin;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.VersionInfo;
+import org.apache.hadoop.tracing.SpanReceiverHost;
 import org.mortbay.util.ajax.JSON;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -2046,6 +2047,7 @@ public class DataNode extends Configured
     List<StorageLocation> locations =
         checkStorageLocations(dataDirs, localFS, dataNodeDiskChecker);
     DefaultMetricsSystem.initialize("DataNode");
+    SpanReceiverHost.init(conf);
 
     assert locations.size() > 0 : "number of data directories should be > 0";
     return new DataNode(conf, locations, resources);

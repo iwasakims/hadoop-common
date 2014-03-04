@@ -53,6 +53,7 @@ import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.DataChecksum;
 
 import com.google.common.annotations.VisibleForTesting;
+import org.htrace.Span;
 
 /**
  * This is a wrapper around connection to datanode
@@ -393,11 +394,12 @@ public class RemoteBlockReader2  implements BlockReader {
                                      String clientName,
                                      Peer peer, DatanodeID datanodeID,
                                      PeerCache peerCache,
-                                     CachingStrategy cachingStrategy) throws IOException {
+                                     CachingStrategy cachingStrategy,
+                                     Span parentSpan) throws IOException {
     // in and out will be closed when sock is closed (by the caller)
     final DataOutputStream out = new DataOutputStream(new BufferedOutputStream(
           peer.getOutputStream()));
-    new Sender(out).readBlock(block, blockToken, clientName, startOffset, len,
+    new Sender(out, parentSpan).readBlock(block, blockToken, clientName, startOffset, len,
         verifyChecksum, cachingStrategy);
 
     //

@@ -71,6 +71,9 @@ import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.IdentityHashStore;
+import org.htrace.Span;
+import org.htrace.Trace;
+import org.htrace.TraceScope;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -98,6 +101,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
   private long blockEnd = -1;
   private CachingStrategy cachingStrategy;
   private final ReadStatistics readStatistics = new ReadStatistics();
+  private Span traceSpan = null;
 
   /**
    * Track the ByteBuffers that we have handed out to readers.
@@ -225,7 +229,15 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
     this.src = src;
     this.cachingStrategy =
         dfsClient.getDefaultReadCachingStrategy();
+    TraceScope traceScope = null;
+    if (Trace.isTracing()) {
+      traceScope = Trace.startSpan("DFSInputStream");
+      traceScope.getSpan().addTimelineAnnotation("Opening file " + src);
+    }
     openInfo();
+    if (traceScope != null) {
+      this.traceSpan = traceScope.detach();
+    }
   }
 
   /**
@@ -583,6 +595,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
             setClientCacheContext(dfsClient.getClientContext()).
             setUserGroupInformation(dfsClient.ugi).
             setConfiguration(dfsClient.getConfiguration()).
+            setParentSpan(traceSpan).
             build();
         if(connectFailedOnce) {
           DFSClient.LOG.info("Successfully connected to " + targetAddr +
@@ -619,28 +632,38 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
     if (closed) {
       return;
     }
-    dfsClient.checkOpen();
+    TraceScope innerTraceScope = null;
+    if (this.traceSpan != null) {
+      innerTraceScope = Trace.continueSpan(traceSpan.child("DFSInputStream.close"));
+    }
+    try {
+      dfsClient.checkOpen();
 
-    if (!extendedReadBuffers.isEmpty()) {
-      final StringBuilder builder = new StringBuilder();
-      extendedReadBuffers.visitAll(new IdentityHashStore.Visitor<ByteBuffer, Object>() {
-        private String prefix = "";
-        @Override
-        public void accept(ByteBuffer k, Object v) {
-          builder.append(prefix).append(k);
-          prefix = ", ";
-        }
-      });
-      DFSClient.LOG.warn("closing file " + src + ", but there are still " +
-          "unreleased ByteBuffers allocated by read().  " +
-          "Please release " + builder.toString() + ".");
+      if (!extendedReadBuffers.isEmpty()) {
+        final StringBuilder builder = new StringBuilder();
+        extendedReadBuffers.visitAll(new IdentityHashStore.Visitor<ByteBuffer, Object>() {
+          private String prefix = "";
+          @Override
+          public void accept(ByteBuffer k, Object v) {
+            builder.append(prefix).append(k);
+            prefix = ", ";
+          }
+        });
+        DFSClient.LOG.warn("closing file " + src + ", but there are still " +
+            "unreleased ByteBuffers allocated by read().  " +
+            "Please release " + builder.toString() + ".");
+      }
+      if (blockReader != null) {
+        blockReader.close();
+        blockReader = null;
+      }
+      super.close();
+      closed = true;
+    } finally {
+      // Clean up tracing
+      if (innerTraceScope != null) innerTraceScope.close();
+      if (traceSpan != null) traceSpan.stop();
     }
-    if (blockReader != null) {
-      blockReader.close();
-      blockReader = null;
-    }
-    super.close();
-    closed = true;
   }
 
   @Override
@@ -836,14 +859,12 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
   @Override
   public synchronized int read(final byte buf[], int off, int len) throws IOException {
     ReaderStrategy byteArrayReader = new ByteArrayStrategy(buf);
-
     return readWithStrategy(byteArrayReader, off, len);
   }
 
   @Override
   public synchronized int read(final ByteBuffer buf) throws IOException {
     ReaderStrategy byteBufferReader = new ByteBufferStrategy(buf);
-
     return readWithStrategy(byteBufferReader, 0, buf.remaining());
   }
 
@@ -1036,6 +1057,7 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
             setClientCacheContext(dfsClient.getClientContext()).
             setUserGroupInformation(dfsClient.ugi).
             setConfiguration(dfsClient.getConfiguration()).
+            setParentSpan(traceSpan).
             build();
         int nread = reader.readAll(buf, offset, len);
         updateReadStatistics(readStatistics, nread, reader);
@@ -1382,6 +1404,9 @@ implements ByteBufferReadable, CanSetDropBehind, CanSetReadahead,
     }
     if (closed) {
       throw new IOException("Stream is closed!");
+    }
+    if (traceSpan != null) {
+      traceSpan.addTimelineAnnotation("Seeking to "+targetPos);
     }
     boolean done = false;
     if (pos <= targetPos && targetPos <= blockEnd) {
