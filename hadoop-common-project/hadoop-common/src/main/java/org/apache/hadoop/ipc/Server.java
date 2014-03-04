@@ -2196,6 +2196,9 @@ public abstract class Server {
                 StringUtils.stringifyException(e));
           }
         } finally {
+          if (traceScope != null) {
+            traceScope.close();
+          }
           IOUtils.cleanup(LOG, traceScope);
         }
       }

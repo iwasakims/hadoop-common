@@ -40,6 +40,7 @@ import org.apache.hadoop.hdfs.protocolPB.PBHelper;
 import org.apache.hadoop.hdfs.server.datanode.CachingStrategy;
 import org.apache.hadoop.hdfs.shortcircuit.ShortCircuitShm.SlotId;
 import org.htrace.Trace;
+import org.htrace.TraceInfo;
 import org.htrace.TraceScope;
 
 /** Receiver */
@@ -111,9 +112,9 @@ public abstract class Receiver implements DataTransferProtocol {
   private void opReadBlock() throws IOException {
     OpReadBlockProto proto = OpReadBlockProto.parseFrom(vintPrefixed(in));
     TraceScope ts = null;
-    if (Trace.isTracing()) {
-       Trace.startSpan("Receiver.opReadBlock",
-         fromProto(proto.getHeader().getBaseHeader().getTraceInfo()));
+    TraceInfo ti = fromProto(proto.getHeader().getBaseHeader().getTraceInfo());
+    if (ti != null) {
+       ts = Trace.startSpan("Receiver.opReadBlock", ti);
     }
     try {
       readBlock(PBHelper.convert(proto.getHeader().getBaseHeader().getBlock()),
@@ -135,9 +136,9 @@ public abstract class Receiver implements DataTransferProtocol {
     final OpWriteBlockProto proto = OpWriteBlockProto.parseFrom(vintPrefixed(in));
     final DatanodeInfo[] targets = PBHelper.convert(proto.getTargetsList());
     TraceScope ts = null;
-    if (Trace.isTracing()) {
-      Trace.startSpan("Receiver.opWriteBlock",
-        fromProto(proto.getHeader().getBaseHeader().getTraceInfo()));
+    TraceInfo ti = fromProto(proto.getHeader().getBaseHeader().getTraceInfo());
+    if (ti != null) {
+      ts = Trace.startSpan("Receiver.opWriteBlock", ti);
     }
     writeBlock(PBHelper.convert(proto.getHeader().getBaseHeader().getBlock()),
         PBHelper.convertStorageType(proto.getStorageType()),
