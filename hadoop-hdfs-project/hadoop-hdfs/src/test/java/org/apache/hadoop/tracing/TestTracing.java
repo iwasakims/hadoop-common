@@ -117,8 +117,21 @@ public class TestTracing {
   }
 
   @Test
+  public void testWriteWithoutTraceHooks() throws Exception {
+    Path file = new Path("withoutTraceWriteTest.dat");
+    FSDataOutputStream stream = dfs.create(file);
+    for (int i = 0; i < 10; i++) {
+      byte[] data = RandomStringUtils.randomAlphabetic(102400).getBytes();
+      stream.write(data);
+    }
+    stream.hflush();
+    stream.close();
+    Assert.assertTrue(SetSpanReceiver.SetHolder.size() == 0);
+  }
+
+  @Test
   public void testReadTraceHooks() throws Exception {
-    String fileName = "traceRead.dat";
+    String fileName = "traceReadTest.dat";
     Path filePath = new Path(fileName);
 
     // Create the file.
@@ -179,6 +192,38 @@ public class TestTracing {
     for (Span span : SetSpanReceiver.SetHolder.spans) {
       Assert.assertEquals(ts.getSpan().getTraceId(), span.getTraceId());
     }
+  }
+
+  @Test
+  public void testReadWithoutTraceHooks() throws Exception {
+    String fileName = "withoutTraceReadTest.dat";
+    Path filePath = new Path(fileName);
+
+    // Create the file.
+    FSDataOutputStream ostream = dfs.create(filePath);
+    for (int i = 0; i < 50; i++) {
+      byte[] data = RandomStringUtils.randomAlphabetic(10240).getBytes();
+      ostream.write(data);
+    }
+    ostream.close();
+
+    FSDataInputStream istream = dfs.open(filePath, 10240);
+    ByteBuffer buf = ByteBuffer.allocate(10240);
+
+    int count = 0;
+    try {
+      while (istream.read(buf) > 0) {
+        count += 1;
+        buf.clear();
+        istream.seek(istream.getPos() + 5);
+
+      }
+    } catch (IOException ioe) {
+      // Ignore this it's probably a seek after eof.
+    } finally {
+      istream.close();
+    }
+    Assert.assertTrue(SetSpanReceiver.SetHolder.size() == 0);
   }
 
   @Before
