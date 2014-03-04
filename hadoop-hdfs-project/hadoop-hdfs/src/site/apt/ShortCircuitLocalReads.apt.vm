@@ -126,6 +126,8 @@ HDFS Short-Circuit Local Reads
   * Zero-copy read is used only in skipping checksum mode,
     i.e. opts contains <<<ReadOption.SKIP_CHECKSUMS>>> or
     <<<dfs.client.read.shortcircuit.skip.checksum>>> is set to true.
+
+  []
   
   Client must close used ByteBuffer by calling <<<releaseBuffer>>> method.
 
