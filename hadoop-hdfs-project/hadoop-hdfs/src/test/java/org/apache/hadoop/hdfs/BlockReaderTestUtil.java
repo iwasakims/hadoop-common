@@ -209,6 +209,7 @@ public class BlockReaderTestUtil {
           return peer;
         }
       }).
+      setParentSpan(null).
       build();
   }
 

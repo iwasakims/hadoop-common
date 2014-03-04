@@ -30,6 +30,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import javax.net.SocketFactory;
 
+import com.google.common.base.Joiner;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -47,7 +48,11 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.SecretManager;
 import org.apache.hadoop.security.token.TokenIdentifier;
 import org.apache.hadoop.util.ProtoUtil;
+import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
+import org.htrace.Sampler;
+import org.htrace.Trace;
+import org.htrace.TraceScope;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.BlockingService;
@@ -180,7 +185,7 @@ public class ProtobufRpcEngine implements RpcEngine {
       if (LOG.isDebugEnabled()) {
         startTime = Time.now();
       }
-      
+
       if (args.length != 2) { // RpcController + Message
         throw new ServiceException("Too many parameters for request. Method: ["
             + method.getName() + "]" + ", Expected: 2, Actual: "
@@ -189,6 +194,16 @@ public class ProtobufRpcEngine implements RpcEngine {
       if (args[1] == null) {
         throw new ServiceException("null param while calling Method: ["
             + method.getName() + "]");
+      }
+
+      TraceScope traceScope = null;
+      // if Tracing is on then start a new span for this rpc.
+      // guard it in the if statement to make sure there isn't
+      // any extra string manipulation.
+      if (Trace.isTracing()) {
+        traceScope = Trace.startSpan(
+            method.getDeclaringClass().getCanonicalName() +
+            "." + method.getName());
       }
 
       RequestHeaderProto rpcRequestHeader = constructRpcRequestHeader(method);
@@ -212,8 +227,13 @@ public class ProtobufRpcEngine implements RpcEngine {
               remoteId + ": " + method.getName() +
                 " {" + e + "}");
         }
-
+        if (Trace.isTracing()) {
+          traceScope.getSpan().addTimelineAnnotation(
+              "Call got exception: " + e.getMessage());
+        }
         throw new ServiceException(e);
+      } finally {
+        if (traceScope != null) traceScope.close();
       }
 
       if (LOG.isDebugEnabled()) {

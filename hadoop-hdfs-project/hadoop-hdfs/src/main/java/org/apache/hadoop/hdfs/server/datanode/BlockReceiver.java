@@ -56,6 +56,9 @@ import org.apache.hadoop.util.Daemon;
 import org.apache.hadoop.util.DataChecksum;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
+import org.htrace.Span;
+import org.htrace.Trace;
+import org.htrace.TraceScope;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -121,6 +124,8 @@ class BlockReceiver implements Closeable {
 
   private boolean syncOnClose;
   private long restartBudget;
+  
+  private Span traceSpan;
 
   BlockReceiver(final ExtendedBlock block, final DataInputStream in,
       final String inAddr, final String myAddr,
@@ -157,6 +162,8 @@ class BlockReceiver implements Closeable {
             + "\n  cachingStrategy = " + cachingStrategy
             );
       }
+      
+      this.traceSpan = Trace.currentSpan();
 
       //
       // Open local disk out
@@ -268,6 +275,9 @@ class BlockReceiver implements Closeable {
    */
   @Override
   public void close() throws IOException {
+    if (traceSpan != null) {
+      traceSpan.addTimelineAnnotation("Closing files");
+    }
     if (packetReceiver != null) {
       packetReceiver.close();
     }
@@ -324,6 +334,9 @@ class BlockReceiver implements Closeable {
     }
     if (measuredFlushTime) {
       datanode.metrics.addFlushNanos(flushTotalNanos);
+    }
+    if (traceSpan != null) {
+      traceSpan.addTimelineAnnotation("Closed");
     }
     // disk check
     if(ioe != null) {
@@ -1066,6 +1079,10 @@ class BlockReceiver implements Closeable {
      */
     @Override
     public void run() {
+      TraceScope traceScope = null;
+      if (traceSpan != null) {
+        traceScope = Trace.startSpan("PacketResponder", traceSpan);
+      }
       boolean lastPacketInBlock = false;
       final long startTime = ClientTraceLog.isInfoEnabled() ? System.nanoTime() : 0;
       while (isRunning() && !lastPacketInBlock) {
@@ -1193,6 +1210,7 @@ class BlockReceiver implements Closeable {
           }
         }
       }
+      if (traceScope != null) traceScope.close();
       LOG.info(myString + " terminating");
     }
     
