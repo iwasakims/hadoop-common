@@ -47,6 +47,14 @@ HDFS Short-Circuit Local Reads
   except the HDFS user or root to create this path.  For this reason, paths
   under <<</var/run>>> or <<</var/lib>>> are often used.
 
+  Client and DataNode uses shared memory segments
+  to communicate short-circuit read.
+  if /dev/shm is not world writable or does not exist in your environment,
+  You can change the paths on which shared memory segments are created by
+  setting the value of <<<dfs.datanode.shared.file.descriptor.paths>>>
+  to comma separated paths like <<</dev/shm,/tmp>>>.
+  It tries paths in order until creation succeeds.
+  
   Short-circuit local reads need to be configured on both the <<<DataNode>>>
   and the client.
 
@@ -73,7 +81,8 @@ HDFS Short-Circuit Local Reads
   on which clients directly open HDFS block files is still available
   for platforms other than Linux.
   Setting the value of <<<dfs.client.use.legacy.blockreader.local>>>
-  in addition to <<<dfs.client.read.shortcircuit>>> to true enables this feature.
+  in addition to <<<dfs.client.read.shortcircuit>>>
+  to true enables this feature.
   Only users listed in the value of
   <<<dfs.block.local-path-access.user>>> can use this feature.
 
@@ -136,6 +145,8 @@ HDFS Short-Circuit Local Reads
   Javadoc of
   <<<read(ByteBufferPool bufferPool, int maxLength, EnumSet<ReadOption> opts)>>>
   method and <<<releaseBuffer(ByteBuffer buffer)>>> method}}.
+
+
 
 * Configuration Properties
 
