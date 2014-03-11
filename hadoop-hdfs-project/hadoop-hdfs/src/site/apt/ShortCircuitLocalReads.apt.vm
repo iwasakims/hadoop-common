@@ -53,7 +53,7 @@ HDFS Short-Circuit Local Reads
   You can change the paths on which shared memory segments are created by
   setting the value of <<<dfs.datanode.shared.file.descriptor.paths>>>
   to comma separated paths like <<</dev/shm,/tmp>>>.
-  It tries paths in order until creation succeeds.
+  It tries paths in order until creation of shared memory segment succeeds.
   
   Short-circuit local reads need to be configured on both the <<<DataNode>>>
   and the client.
@@ -120,33 +120,29 @@ HDFS Short-Circuit Local Reads
   public void releaseBuffer(ByteBuffer buffer);
 ----
 
-  <<<read>>> method returns direct ByteBuffer containing file data.
+  * <<<read>>> method returns direct ByteBuffer containing file data.
 
-  * By passing
-    {{{../../api/org/apache/hadoop/io/ByteBufferPool.html}<<<ByteBufferPool>>>}}
-    implementation as factory argument,
-    it fallbacks to normal read path when zero-copy is not available and
-    ByteBuffer got from pool containing read data.
+    * By passing
+      {{{../../api/org/apache/hadoop/io/ByteBufferPool.html}<<<ByteBufferPool>>>}}
+      implementation as factory argument,
+      it fallbacks to normal read path when zero-copy is not available and
+      ByteBuffer got from pool containing read data.
+  
+    * If factory argument is null,
+      <<<UnsupportedOperationException>>> will be thrown
+      when zero-copy is not available.
+  
+    * Zero-copy read is used only in skipping checksum mode,
+      i.e. opts contains <<<ReadOption.SKIP_CHECKSUMS>>> or
+      <<<dfs.client.read.shortcircuit.skip.checksum>>> is set to true.
 
-  * If factory argument is null,
-    <<<UnsupportedOperationException>>> will be thrown
-    when zero-copy is not available.
-
-  * Zero-copy read is used only in skipping checksum mode,
-    i.e. opts contains <<<ReadOption.SKIP_CHECKSUMS>>> or
-    <<<dfs.client.read.shortcircuit.skip.checksum>>> is set to true.
+  * Client must close used ByteBuffer by calling <<<releaseBuffer>>> method.
 
   []
-  
-  Client must close used ByteBuffer by calling <<<releaseBuffer>>> method.
 
   See also 
   {{{../../api/org/apache/hadoop/fs/FSDataInputStream.html}
-  Javadoc of
-  <<<read(ByteBufferPool bufferPool, int maxLength, EnumSet<ReadOption> opts)>>>
-  method and <<<releaseBuffer(ByteBuffer buffer)>>> method}}.
-
-
+  javadoc of methods for zero-copy short-circuit read}}.
 
 * Configuration Properties
 
