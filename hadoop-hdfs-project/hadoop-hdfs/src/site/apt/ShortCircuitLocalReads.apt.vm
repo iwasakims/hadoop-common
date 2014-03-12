@@ -47,14 +47,9 @@ HDFS Short-Circuit Local Reads
   except the HDFS user or root to create this path.  For this reason, paths
   under <<</var/run>>> or <<</var/lib>>> are often used.
 
-  Client and DataNode uses shared memory segments
-  to communicate short-circuit read.
-  if /dev/shm is not world writable or does not exist in your environment,
-  You can change the paths on which shared memory segments are created by
-  setting the value of <<<dfs.datanode.shared.file.descriptor.paths>>>
-  to comma separated paths like <<</dev/shm,/tmp>>>.
-  It tries paths in order until creation of shared memory segment succeeds.
-  
+  The client and the DataNode exchange information via a shared memory segment
+  on <<</dev/shm>>>.
+
   Short-circuit local reads need to be configured on both the <<<DataNode>>>
   and the client.
 
@@ -79,12 +74,22 @@ HDFS Short-Circuit Local Reads
 
   Legacy short-circuit local reads implementation
   on which clients directly open HDFS block files is still available
-  for platforms other than Linux.
+  for the platforms other than Linux.
   Setting the value of <<<dfs.client.use.legacy.blockreader.local>>>
   in addition to <<<dfs.client.read.shortcircuit>>>
   to true enables this feature.
-  Only users listed in the value of
-  <<<dfs.block.local-path-access.user>>> can use this feature.
+
+  Because Legacy short-circuit local reads is insecure,
+  access to this feature is limited to the users listed in
+  <<<dfs.block.local-path-access.user>>>.
+
+  You also need to set the value of <<<dfs.datanode.data.dir.perm>>>
+  to <<<750>>> instead of the default <<<700>>> and
+  chmod/chown the directory tree under <<<dfs.datanode.data.dir>>>
+  as readable to the client and the datanode.
+  You must take caution because this means that
+  the client can read all of the block files bypassing HDFS permission.
+
 
 ----
 <configuration>
@@ -102,97 +107,3 @@ HDFS Short-Circuit Local Reads
   </property>
 </configuration>
 ----
-
-* {Zero-Copy Short-Circuit Local Reads}
-
-  <<<HdfsDataInputStream>>> (and <<<DFSInputStream>>>) provides
-  so-called zero-copy feature which is the fast short-circuit local reads
-  avoiding unnecessary data copy in OS kernel by using mmap.
-  Though (legacy) {{Short-Circuit Local Reads}} is application transparent,
-  {{Zero-Copy Short-Circuit Local Reads}} requires its own client API
-  shown below.
-
-----
-  public ByteBuffer read(ByteBufferPool factory, int maxLength,
-      EnumSet<ReadOption> opts)
-          throws IOException, UnsupportedOperationException;
-
-  public void releaseBuffer(ByteBuffer buffer);
-----
-
-  * <<<read>>> method returns direct ByteBuffer containing file data.
-
-    * By passing
-      {{{../../api/org/apache/hadoop/io/ByteBufferPool.html}<<<ByteBufferPool>>>}}
-      implementation as factory argument,
-      it fallbacks to normal read path when zero-copy is not available and
-      ByteBuffer got from pool containing read data.
-  
-    * If factory argument is null,
-      <<<UnsupportedOperationException>>> will be thrown
-      when zero-copy is not available.
-  
-    * Zero-copy read is used only in skipping checksum mode,
-      i.e. opts contains <<<ReadOption.SKIP_CHECKSUMS>>> or
-      <<<dfs.client.read.shortcircuit.skip.checksum>>> is set to true.
-
-  * Client must close used ByteBuffer by calling <<<releaseBuffer>>> method.
-
-  []
-
-  See also 
-  {{{../../api/org/apache/hadoop/fs/FSDataInputStream.html}
-  javadoc of methods for zero-copy short-circuit read}}.
-
-* Configuration Properties
-
-  Information used by short-circuit read is cached in client
-  beyond life spans of each InputStreams.
-  There are some configuration parameters to control the size of
-  this client cache.
-
-*-------------------------+------------------------+
-|| Key                    || Notes                 |
-*-------------------------+------------------------+
-| <<<dfs.client.read.shortcircuit>>> | |
-| | This configuration parameter turns on short-circuit local reads. |
-*-------------------------+-------------------------+------------------------+
-| <<<dfs.domain.socket.path>>> | |
-| | The file path of UNIX domain socket used by short-circuit local read. |
-*-------------------------+-------------------------+------------------------+
-| <<<dfs.client.read.shortcircuit.skip.checksum>>> | |
-| | If this configuration parameter is set, |
-| | short-circuit local reads will skip checksums. |
-| | This is normally not recommended, |
-| | but it may be useful for special setups. |
-| | You might consider using this |
-| | if you are doing your own checksumming outside of HDFS. |
-*-------------------------+-------------------------+------------------------+
-| <<<dfs.client.read.shortcircuit.streams.cache.size>>> | |
-| | The DFSClient maintains a cache of recently opened file descriptors. |
-| | This parameter controls the size of that cache. |
-| | Setting this higher will use more file descriptors, |
-| | but potentially provide better performance on workloads |
-| | involving lots of seeks. |
-*-------------------------+-------------------------+------------------------+
-| <<<dfs.client.read.shortcircuit.streams.cache.expiry.ms>>> | |
-| | This controls the minimum amount of time |
-| | file descriptors need to sit in the client cache context |
-| | before they can be closed for being inactive for too long. |
-*-------------------------+-------------------------+------------------------+
-| <<<dfs.client.use.legacy.blockreader.local>>> | |
-| | Legacy short-circuit reader implementation based on HDFS-2246 is used |
-| | if this configuration parameter is true. |
-| | This is for platforms where the new implementation based on HDFS-347 |
-| | is not available. |
-*-------------------------+-------------------------+------------------------+
-| <<<dfs.block.local-path-access.user>>> | |
-| | Comma separated list of users allowd to open block files |
-| | on legacy short-circuit local read. |
-*-------------------------+-------------------------+------------------------+
-| <<<dfs.client.domain.socket.data.traffic>>> | |
-| | This control whether we will try to pass normal data traffic |
-| | over UNIX domain socket rather than over TCP socket |
-| | on node-local data transfer. |
-| | This is experimental feature now and is turned off by default. |
-*-------------------------+-------------------------+------------------------+
