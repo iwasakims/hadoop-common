@@ -41,13 +41,13 @@ HDFS Short-Circuit Local Reads
   Libraries}} for details on enabling this library.
 
   Short-circuit reads make use of a UNIX domain socket.  This is a special path
-  in the filesystem that allows the client and the DataNodes to communicate.
-  You will need to set a path to this socket.  The DataNode needs to be able to
+  in the filesystem that allows the client and the <<<DataNode>>>s to communicate.
+  You will need to set a path to this socket.  The <<<DataNode>>> needs to be able to
   create this path.  On the other hand, it should not be possible for any user
   except the HDFS user or root to create this path.  For this reason, paths
   under <<</var/run>>> or <<</var/lib>>> are often used.
 
-  The client and the DataNode exchange information via a shared memory segment
+  The client and the <<<DataNode>>> exchange information via a shared memory segment
   on <<</dev/shm>>>.
 
   Short-circuit local reads need to be configured on both the <<<DataNode>>>
@@ -73,7 +73,7 @@ HDFS Short-Circuit Local Reads
 * Legacy HDFS Short-Circuit Local Reads
 
   Legacy short-circuit local reads implementation
-  on which clients directly open HDFS block files is still available
+  on which the clients directly open the HDFS block files is still available
   for the platforms other than Linux.
   Setting the value of <<<dfs.client.use.legacy.blockreader.local>>>
   in addition to <<<dfs.client.read.shortcircuit>>>
@@ -81,12 +81,12 @@ HDFS Short-Circuit Local Reads
 
   Because Legacy short-circuit local reads is insecure,
   access to this feature is limited to the users listed in
-  <<<dfs.block.local-path-access.user>>>.
+  the value of <<<dfs.block.local-path-access.user>>>.
 
   You also need to set the value of <<<dfs.datanode.data.dir.perm>>>
   to <<<750>>> instead of the default <<<700>>> and
   chmod/chown the directory tree under <<<dfs.datanode.data.dir>>>
-  as readable to the client and the datanode.
+  as readable to the client and the <<<DataNode>>>.
   You must take caution because this means that
   the client can read all of the block files bypassing HDFS permission.
 
