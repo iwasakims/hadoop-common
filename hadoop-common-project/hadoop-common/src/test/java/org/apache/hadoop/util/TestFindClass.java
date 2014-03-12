@@ -17,13 +17,14 @@
 
 package org.apache.hadoop.util;
 
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
 import junit.framework.Assert;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.util.FindClass;
+import org.apache.hadoop.util.ToolRunner;
 import org.junit.Test;
-
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
 
 /**
  * Test the find class logic
@@ -51,67 +52,88 @@ public class TestFindClass extends Assert {
 
   @Test
   public void testFindsResource() throws Throwable {
-    run(FindClass.SUCCESS, FindClass.A_RESOURCE, "org/apache/hadoop/util/TestFindClass.class");
+    run(FindClass.SUCCESS,
+        FindClass.A_RESOURCE, "org/apache/hadoop/util/TestFindClass.class");
   }
 
   @Test
   public void testFailsNoSuchResource() throws Throwable {
-    run(FindClass.E_NOT_FOUND, FindClass.A_RESOURCE, "org/apache/hadoop/util/ThereIsNoSuchClass.class");
+    run(FindClass.E_NOT_FOUND,
+        FindClass.A_RESOURCE,
+        "org/apache/hadoop/util/ThereIsNoSuchClass.class");
   }
 
   @Test
   public void testLoadFindsSelf() throws Throwable {
-    run(FindClass.SUCCESS, FindClass.A_LOAD, "org.apache.hadoop.util.TestFindClass");
+    run(FindClass.SUCCESS,
+        FindClass.A_LOAD, "org.apache.hadoop.util.TestFindClass");
   }
 
   @Test
   public void testLoadFailsNoSuchClass() throws Throwable {
-    run(FindClass.E_NOT_FOUND, FindClass.A_LOAD, "org.apache.hadoop.util.ThereIsNoSuchClass");
+    run(FindClass.E_NOT_FOUND,
+        FindClass.A_LOAD, "org.apache.hadoop.util.ThereIsNoSuchClass");
   }
 
   @Test
   public void testLoadWithErrorInStaticInit() throws Throwable {
-    run(FindClass.E_LOAD_FAILED, FindClass.A_LOAD, "org.apache.hadoop.util.TestFindClass$FailInStaticInit");
+    run(FindClass.E_LOAD_FAILED,
+        FindClass.A_LOAD,
+        "org.apache.hadoop.util.TestFindClass$FailInStaticInit");
   }
 
   @Test
   public void testCreateHandlesBadToString() throws Throwable {
-    run(FindClass.SUCCESS, FindClass.A_CREATE, "org.apache.hadoop.util.TestFindClass$BadToStringClass");
+    run(FindClass.SUCCESS,
+        FindClass.A_CREATE,
+        "org.apache.hadoop.util.TestFindClass$BadToStringClass");
   }
 
   @Test
   public void testCreatesClass() throws Throwable {
-    run(FindClass.SUCCESS, FindClass.A_CREATE, "org.apache.hadoop.util.TestFindClass");
+    run(FindClass.SUCCESS,
+        FindClass.A_CREATE, "org.apache.hadoop.util.TestFindClass");
   }
 
   @Test
   public void testCreateFailsInStaticInit() throws Throwable {
-    run(FindClass.E_LOAD_FAILED, FindClass.A_CREATE, "org.apache.hadoop.util.TestFindClass$FailInStaticInit");
+    run(FindClass.E_LOAD_FAILED,
+        FindClass.A_CREATE,
+        "org.apache.hadoop.util.TestFindClass$FailInStaticInit");
   }
 
   @Test
-  public void testCreateFailsInCtor() throws Throwable {
-    run(FindClass.E_CREATE_FAILED, FindClass.A_CREATE, "org.apache.hadoop.util.TestFindClass$FailInCtor");
+  public void testCreateFailsInConstructor() throws Throwable {
+    run(FindClass.E_CREATE_FAILED,
+        FindClass.A_CREATE,
+        "org.apache.hadoop.util.TestFindClass$FailInConstructor");
   }
 
   @Test
-  public void testCreateFailsNoEmptyCtor() throws Throwable {
-    run(FindClass.E_CREATE_FAILED, FindClass.A_CREATE, "org.apache.hadoop.util.TestFindClass$NoEmptyCtor");
+  public void testCreateFailsNoEmptyConstructor() throws Throwable {
+    run(FindClass.E_CREATE_FAILED,
+        FindClass.A_CREATE,
+        "org.apache.hadoop.util.TestFindClass$NoEmptyConstructor");
   }
 
   @Test
   public void testLoadPrivateClass() throws Throwable {
-    run(FindClass.SUCCESS, FindClass.A_LOAD, "org.apache.hadoop.util.TestFindClass$PrivateClass");
+    run(FindClass.SUCCESS,
+        FindClass.A_LOAD, "org.apache.hadoop.util.TestFindClass$PrivateClass");
   }
 
   @Test
   public void testCreateFailsPrivateClass() throws Throwable {
-    run(FindClass.E_CREATE_FAILED, FindClass.A_CREATE, "org.apache.hadoop.util.TestFindClass$PrivateClass");
+    run(FindClass.E_CREATE_FAILED,
+        FindClass.A_CREATE,
+        "org.apache.hadoop.util.TestFindClass$PrivateClass");
   }
 
   @Test
-  public void testCreateFailsInPrivateCtor() throws Throwable {
-    run(FindClass.E_CREATE_FAILED, FindClass.A_CREATE, "org.apache.hadoop.util.TestFindClass$PrivateCtor");
+  public void testCreateFailsInPrivateConstructor() throws Throwable {
+    run(FindClass.E_CREATE_FAILED,
+        FindClass.A_CREATE,
+        "org.apache.hadoop.util.TestFindClass$PrivateConstructor");
   }
 
   @Test
@@ -145,10 +167,10 @@ public class TestFindClass extends Assert {
   }
 
   /**
-   * trigger a divide by zero fault in the ctor
+   * trigger a divide by zero fault in the constructor
    */
-  public static class FailInCtor {
-    public FailInCtor() {
+  public static class FailInConstructor {
+    public FailInConstructor() {
       int x = 0;
       int y = 1 / x;
     }
@@ -157,8 +179,8 @@ public class TestFindClass extends Assert {
   /**
    * A class with no parameterless constructor -expect creation to fail
    */
-  public static class NoEmptyCtor {
-    public NoEmptyCtor(String text) {
+  public static class NoEmptyConstructor {
+    public NoEmptyConstructor(String text) {
     }
   }
 
@@ -177,7 +199,8 @@ public class TestFindClass extends Assert {
   }
 
   /**
-   * This has a private constructor -creating it will trigger an IllegalAccessException
+   * This has a private constructor
+   * -creating it will trigger an IllegalAccessException
    */
   public static class PrivateClass {
     private PrivateClass() {
@@ -185,10 +208,11 @@ public class TestFindClass extends Assert {
   }
 
   /**
-   * This has a private constructor -creating it will trigger an IllegalAccessException
+   * This has a private constructor
+   * -creating it will trigger an IllegalAccessException
    */
-  public static class PrivateCtor {
-    private PrivateCtor() {
+  public static class PrivateConstructor {
+    private PrivateConstructor() {
     }
   }
 }

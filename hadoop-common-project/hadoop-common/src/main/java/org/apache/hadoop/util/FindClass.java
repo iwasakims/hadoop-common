@@ -20,7 +20,9 @@ package org.apache.hadoop.util;
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
-
+import org.apache.hadoop.util.StringUtils;
+import org.apache.hadoop.util.Tool;
+import org.apache.hadoop.util.ToolRunner;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
@@ -68,13 +70,12 @@ public final class FindClass extends Configured implements Tool {
   /**
    * Command to locate a resource: {@value}
    */
-  public static final String A_RESOURCE = "resource";
+  public static final String A_RESOURCE = "locate";
 
   /**
    * Command to locate and print a resource: {@value}
    */
-
-  public static final String A_PRINTRESOURCE = "printresource";
+  public static final String A_PRINTRESOURCE = "print";
 
   /**
    * Exit code when the operation succeeded: {@value}
@@ -223,6 +224,7 @@ public final class FindClass extends Configured implements Tool {
    */
   private static void out(String s, Object... args) {
     stdout.format(s, args);
+    stdout.print('\n');
   }
 
   /**
@@ -340,8 +342,9 @@ public final class FindClass extends Configured implements Tool {
    */
   private int usage(String[] args) {
     err(
-      "Usage : [load <classname> | create <classname> | resource <resourcename>");
-    err("Arguments: " + StringUtils.arrayToString(args));
+      "Usage : [load | create] <classname>");
+    err(
+      "        [locate | print] <resourcename>]");
     err("The return codes are:");
     explainResult(SUCCESS,
                   "The operation was successful");
