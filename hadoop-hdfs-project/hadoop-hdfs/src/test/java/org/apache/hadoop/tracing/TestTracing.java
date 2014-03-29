@@ -61,24 +61,19 @@ public class TestTracing {
 
   @Test
   public void testWriteTraceHooks() throws Exception {
+    long startTime = System.currentTimeMillis();
     TraceScope ts = Trace.startSpan("testWriteTraceHooks", Sampler.ALWAYS);
     Path file = new Path("traceWriteTest.dat");
-    long startTime0 = System.currentTimeMillis();
     FSDataOutputStream stream = dfs.create(file);
-    Thread.sleep(100);
-    long startTime1 = System.currentTimeMillis();
 
     for (int i = 0; i < 10; i++) {
       byte[] data = RandomStringUtils.randomAlphabetic(102400).getBytes();
       stream.write(data);
     }
     stream.hflush();
-    long endTime0 = System.currentTimeMillis();
     stream.close();
+    long endTime = System.currentTimeMillis();
     ts.close();
-    Thread.sleep(100);
-    long endTime1 = System.currentTimeMillis();
-
 
     // There should be ~80 but leave some room so that this doesn't
     // have to be edited if anything is changed.
@@ -104,10 +99,8 @@ public class TestTracing {
     Assert.assertNotNull(s);
     long spanStart = s.getStartTimeMillis();
     long spanEnd = s.getStopTimeMillis();
-    Assert.assertTrue(startTime0 < spanStart);
-    Assert.assertTrue(spanStart < startTime1);
-    Assert.assertTrue(endTime0 < spanEnd);
-    Assert.assertTrue(spanEnd < endTime1);
+    Assert.assertTrue(spanStart - startTime < 50);
+    Assert.assertTrue(spanEnd - endTime < 50);
 
     // There should only be one trace id as it should all be homed in the
     // top trace.
@@ -162,8 +155,8 @@ public class TestTracing {
       istream.close();
     }
     ts.getSpan().addTimelineAnnotation("count: " + count);
-    ts.close();
     long endTime = System.currentTimeMillis();
+    ts.close();
 
     String[] expectedSpanNames = {
         "testReadTraceHooks",
@@ -182,8 +175,8 @@ public class TestTracing {
 
     long spanStart = s.getStartTimeMillis();
     long spanEnd = s.getStopTimeMillis();
-    Assert.assertTrue(spanStart - 30 < startTime);
-    Assert.assertTrue(spanEnd + 10 > endTime);
+    Assert.assertTrue(spanStart - startTime < 50);
+    Assert.assertTrue(spanEnd - endTime < 50);
 
     Assert.assertTrue(SetSpanReceiver.SetHolder.size() > 10);
 
