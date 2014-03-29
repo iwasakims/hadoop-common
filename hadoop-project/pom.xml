@@ -686,7 +686,7 @@
       <dependency>
         <groupId>org.htrace</groupId>
         <artifactId>htrace-core</artifactId>
-        <version>3.0</version>
+        <version>3.0.3</version>
       </dependency>
       <dependency>
         <groupId>org.jdom</groupId>
