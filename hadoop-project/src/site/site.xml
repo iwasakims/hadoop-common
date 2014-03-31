@@ -91,6 +91,7 @@
       <item name="Extended Attributes" href="hadoop-project-dist/hadoop-hdfs/ExtendedAttributes.html"/>
       <item name="HDFS Support for Multihoming" href="hadoop-project-dist/hadoop-hdfs/HdfsMultihoming.html"/>
       <item name="Dapper-like Tracing" href="hadoop-project-dist/hadoop-hdfs/Tracing.html"/>
+      <item name="Tracing" href="hadoop-project-dist/hadoop-hdfs/Tracing.html"/>
     </menu>
 
     <menu name="MapReduce" inherit="top">
