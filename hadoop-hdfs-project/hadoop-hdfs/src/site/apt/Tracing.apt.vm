@@ -65,11 +65,20 @@ public void receiveSpan(Span span);
   In order to use <<<ZipkinSpanReceiver>>>,
   you need to download and setup {{{https://github.com/twitter/zipkin}Zipkin}} first.
 
-  Then you need to add configuration to <<<hdfs-site.xml>>>.
-  Here is the sample configuration for <<<ZipkinSpanReceiver>>>.
-  By adding these configuration to <<<hdfs-site.xml>>> of NameNode and DataNodes,
+  you also need to add the jar of <<<htrace-zipkin>>> to the classpath of Hadoop on each node.
+  Here is example setup procedure.
+ 
++----
+  $ git clone https://github.com/cloudera/htrace
+  $ cd htrace/htrace-zipkin
+  $ mvn compile assembly:single
+  $ cp target/htrace-zipkin-*-jar-with-dependencies.jar $HADOOP_HOME/share/hadoop/hdfs/lib/
++----
+
+  The sample configuration for <<<ZipkinSpanReceiver>>> is shown below.
+  By adding these to <<<hdfs-site.xml>>> of NameNode and DataNodes,
   <<<ZipkinSpanReceiver>>> is initialized on the startup.
-  You need this configuration on the client node in addition to the servers.
+  You also need this configuration on the client node in addition to the servers.
 
 +----
   <property>
