@@ -42,6 +42,7 @@ import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.service.CompositeService;
 import org.apache.hadoop.service.Service;
 import org.apache.hadoop.util.ExitUtil;
+import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.ShutdownHookManager;
 import org.apache.hadoop.util.StringUtils;
@@ -1031,6 +1032,8 @@ public class ResourceManager extends CompositeService implements Recoverable {
     StringUtils.startupShutdownMessage(ResourceManager.class, argv, LOG);
     try {
       Configuration conf = new YarnConfiguration();
+      GenericOptionsParser parser = new GenericOptionsParser(conf, argv);
+      argv = parser.getRemainingArgs();
       ResourceManager resourceManager = new ResourceManager();
       ShutdownHookManager.get().addShutdownHook(
         new CompositeServiceShutdownHook(resourceManager),
@@ -1039,7 +1042,7 @@ public class ResourceManager extends CompositeService implements Recoverable {
       resourceManager.start();
     } catch (Throwable t) {
       LOG.fatal("Error starting ResourceManager", t);
-      System.exit(-1);
+      ExitUtil.terminate(-1, t);
     }
   }
 

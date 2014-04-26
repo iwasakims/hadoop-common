@@ -22,6 +22,8 @@ import static org.junit.Assert.fail;
 
 import java.io.IOException;
 
+import org.apache.hadoop.util.ExitUtil;
+import org.apache.hadoop.util.ExitUtil.ExitException;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.YarnRuntimeException;
 import org.junit.Test;
@@ -51,6 +53,19 @@ public class TestNodeManager {
       assert(e.getCause().getMessage().contains("dummy executor init called"));
     } finally {
       nm.stop();
+    }
+  }
+
+  @Test
+  public void testInvalidCommandLineOption() {
+    ExitUtil.disableSystemExit();
+    try {
+      String[] args = {"-libjars", "non-existent-jar-file-name-for-test"};
+      NodeManager.main(args);
+      fail("Parsing command line should fail");
+    } catch (ExitException e) {
+      // pass
+      ExitUtil.resetFirstExitException();
     }
   }
   

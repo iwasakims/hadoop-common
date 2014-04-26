@@ -34,6 +34,8 @@ import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.service.CompositeService;
+import org.apache.hadoop.util.ExitUtil;
+import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.ShutdownHookManager;
 import org.apache.hadoop.util.StringUtils;
@@ -418,6 +420,13 @@ public class NodeManager extends CompositeService
     StringUtils.startupShutdownMessage(NodeManager.class, args, LOG);
     NodeManager nodeManager = new NodeManager();
     Configuration conf = new YarnConfiguration();
+    try {
+      GenericOptionsParser parser = new GenericOptionsParser(conf, args);
+      args = parser.getRemainingArgs();
+    } catch (IOException e) {
+      LOG.fatal("Error parsing command line options", e);
+      ExitUtil.terminate(-1);
+    }
     nodeManager.initAndStartNodeManager(conf, false);
   }
 

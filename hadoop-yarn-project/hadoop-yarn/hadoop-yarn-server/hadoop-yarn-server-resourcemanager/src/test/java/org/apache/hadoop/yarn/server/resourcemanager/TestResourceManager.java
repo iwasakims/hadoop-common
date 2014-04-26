@@ -28,6 +28,8 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.net.NetworkTopology;
+import org.apache.hadoop.util.ExitUtil;
+import org.apache.hadoop.util.ExitUtil.ExitException;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
@@ -232,6 +234,19 @@ public class TestResourceManager {
           + " less than heartbeat interval")) {
         throw e;
       }
+    }
+  }
+
+  @Test
+  public void testInvalidCommandLineOption() {
+    ExitUtil.disableSystemExit();
+    try {
+      String[] args = {"-libjars", "non-existent-jar-file-name-for-test"};
+      ResourceManager.main(args);
+      fail("Parsing command line should fail");
+    } catch (ExitException e) {
+      // pass
+      ExitUtil.resetFirstExitException();
     }
   }
 
