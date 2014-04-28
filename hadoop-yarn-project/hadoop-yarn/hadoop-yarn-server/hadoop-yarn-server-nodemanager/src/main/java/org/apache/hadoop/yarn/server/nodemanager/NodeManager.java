@@ -422,7 +422,7 @@ public class NodeManager extends CompositeService
     Configuration conf = new YarnConfiguration();
     try {
       GenericOptionsParser parser = new GenericOptionsParser(conf, args);
-      args = parser.getRemainingArgs();
+      parser.getRemainingArgs(); // supressing findbugs warnings
     } catch (IOException e) {
       LOG.fatal("Error parsing command line options", e);
       ExitUtil.terminate(-1);
