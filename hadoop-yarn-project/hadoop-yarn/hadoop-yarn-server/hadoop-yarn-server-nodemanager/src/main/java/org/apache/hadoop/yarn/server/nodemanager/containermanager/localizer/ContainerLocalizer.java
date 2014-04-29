@@ -85,7 +85,7 @@ public class ContainerLocalizer {
   private static final String USERCACHE_CTXT_FMT = "%s.user.cache.dirs";
   private static final FsPermission FILECACHE_PERMS =
       new FsPermission((short)0710);
-  public static final String[] MAXHEAP_OPTS = {"-Xmx1g"};
+  private static final String MAXHEAP_OPTS = "-Xmx1g";
 
   private final String user;
   private final String appId;
@@ -118,7 +118,7 @@ public class ContainerLocalizer {
   }
 
   public static String[] getJavaOpts() {
-    return MAXHEAP_OPTS;
+    return new String[] {MAXHEAP_OPTS};
   }
 
   LocalizationProtocol getProxy(final InetSocketAddress nmAddr) {
