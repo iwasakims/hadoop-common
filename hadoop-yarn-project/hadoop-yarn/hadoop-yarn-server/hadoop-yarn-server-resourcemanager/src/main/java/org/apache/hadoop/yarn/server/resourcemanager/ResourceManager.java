@@ -1033,7 +1033,7 @@ public class ResourceManager extends CompositeService implements Recoverable {
     try {
       Configuration conf = new YarnConfiguration();
       GenericOptionsParser parser = new GenericOptionsParser(conf, argv);
-      parser.getRemainingArgs(); // supressing findbugs warnings
+      parser.getRemainingArgs(); // suppressing findbugs warnings
       ResourceManager resourceManager = new ResourceManager();
       ShutdownHookManager.get().addShutdownHook(
         new CompositeServiceShutdownHook(resourceManager),
