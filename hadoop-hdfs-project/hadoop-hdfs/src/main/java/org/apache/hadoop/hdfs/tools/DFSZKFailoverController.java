@@ -122,6 +122,10 @@ public class DFSZKFailoverController extends ZKFailoverController {
           "HA is not enabled for this namenode.");
     }
     String nnId = HAUtil.getNameNodeId(localNNConf, nsId);
+    if (nnId == null) {
+      String msg = "HA is enabled but could not get namenode ID of this node.";
+      throw new HadoopIllegalArgumentException(msg);
+    }
     NameNode.initializeGenericKeys(localNNConf, nsId, nnId);
     DFSUtil.setGenericConf(localNNConf, nsId, nnId, ZKFC_CONF_KEYS);
     
