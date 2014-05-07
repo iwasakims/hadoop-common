@@ -43,13 +43,17 @@ run_nodemanager () {
   export YARN_IDENT_STRING="$USER-$DN"
   ADDRESS="0.0.0.0"
   NODEMANAGER_CONFIG=" \
-    -Dyarn.nodemanager.localizer.address=${ADDRESS}:`expr 8040 + ${OFFSET}`
-    -Dyarn.nodemanager.address=${ADDRESS}:`expr 8041 + ${OFFSET}`
-    -Dyarn.nodemanager.webapp.address=${ADDRESS}:`expr 8042 + ${OFFSET}`
-    -Dmapreduce.shuffle.port=`expr 13562 + ${OFFSET}` "
+    -Dyarn.nodemanager.localizer.address=${ADDRESS}:`expr 8040 + ${OFFSET}` \
+    -Dyarn.nodemanager.address=${ADDRESS}:`expr 8041 + ${OFFSET}` \
+    -Dyarn.nodemanager.webapp.address=${ADDRESS}:`expr 8042 + ${OFFSET}` \
+    -Dmapreduce.shuffle.port=`expr 13562 + ${OFFSET}` \
+    -Dyarn.nodemanager.aux-services=mapreduce_shuffle \
+    -Dyarn.nodemanager.aux-services.mapreduce_shuffle.class=org.apache.hadoop.mapred.ShuffleHandler "
   "$bin"/yarn-daemon.sh --config "${YARN_CONF_DIR}" \
     "${COMMAND}" nodemanager ${NODEMANAGER_CONFIG}
 }
+
+
 
 CMD=$1
 shift
