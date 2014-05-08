@@ -18,17 +18,20 @@
 # * See the License for the specific language governing permissions and
 # * limitations under the License.
 # */
-# This is used for starting multiple masters on the same machine.
-# run it from HADOOP_HOME just like 'bin/yarn'
+# This is used for starting multiple nodemanagers on the same machine.
+# run it from HADOOP_HOME just like 'bin/yarn'.
+# YARN_IDENT_STRING and port number offset are set based on id(s).
 
 bin=`dirname "${BASH_SOURCE-$0}"`
 bin=`cd "$bin" >/dev/null && pwd`
 
 if [ $# -lt 2 ]; then
   S=`basename "${BASH_SOURCE-$0}"`
-  echo "Usage: $S [--config <conf-dir>] [start|stop] offset(s)"
+  echo "Usage: $S [--config <conf-dir>] [start|stop] id(s)"
   echo ""
-  echo "    e.g. $S start 1"
+  echo "    e.g. $S start 1 2 3"
+  echo ""
+  echo "    YARN_IDENT_STRING and port number offset are set based on id(s)."
   exit
 fi
 

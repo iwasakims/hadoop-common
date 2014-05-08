@@ -18,17 +18,21 @@
 # * See the License for the specific language governing permissions and
 # * limitations under the License.
 # */
-# This is used for starting multiple masters on the same machine.
+# This is used for starting multiple resourcemanagers on the same machine.
 # run it from HADOOP_HOME just like 'bin/yarn'
+# YARN_IDENT_STRING and port number offset are set based on id(s).
 
 bin=`dirname "${BASH_SOURCE-$0}"`
 bin=`cd "$bin" >/dev/null && pwd`
 
-if [ $# -lt 2 ]; then
+if [ $# -lt 3 ]; then
   S=`basename "${BASH_SOURCE-$0}"`
-  echo "Usage: $S [--config <conf-dir>] [start|stop|config] offset(s)"
+  echo "Usage: $S [--config <conf-dir>] [start|stop|config] id1 id2 ..."
   echo ""
-  echo "    e.g. $S start 1"
+  echo "    e.g. $S start 1 2"
+  echo ""
+  echo "    YARN_IDENT_STRING and port number offset are set based on id(s)."
+  echo "    \"config\" subcommand shows configuration needed to connect to RM."
   exit
 fi
 
