@@ -20,7 +20,6 @@ package org.apache.hadoop.tracing;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.HashSet;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -30,8 +29,6 @@ import org.apache.hadoop.util.ShutdownHookManager;
 import org.htrace.HTraceConfiguration;
 import org.htrace.SpanReceiver;
 import org.htrace.Trace;
-
-import com.google.common.base.Preconditions;
 
 /**
  * This class provides functions for reading the names of SpanReceivers from
@@ -44,21 +41,32 @@ public class SpanReceiverHost {
   public static final String SPAN_RECEIVERS_CONF_KEY = "hadoop.trace.spanreceiver.classes";
   private static final Log LOG = LogFactory.getLog(SpanReceiverHost.class);
   private Collection<SpanReceiver> receivers = new HashSet<SpanReceiver>();
-  
-  private static SpanReceiverHost singletonInstance;
+  private boolean closed = false;
 
-  public static synchronized void init(Configuration conf) {
-    if (singletonInstance != null) return;
-    Preconditions.checkNotNull(conf);
-    LOG.info("Initializing htrace span receivers");
-    singletonInstance = new SpanReceiverHost();
-    singletonInstance.loadSpanReceivers(conf);
-    
-    ShutdownHookManager.get().addShutdownHook(new Runnable() {
-      public void run() {
-        singletonInstance.closeReceivers();
+  private static enum SingletonHolder {
+    INSTANCE;
+    Object lock = new Object();
+    SpanReceiverHost host = null;
+  }
+
+  public static SpanReceiverHost getInstance(Configuration conf) {
+    if (SingletonHolder.INSTANCE.host != null) {
+      return SingletonHolder.INSTANCE.host;
+    }
+    synchronized (SingletonHolder.INSTANCE.lock) {
+      if (SingletonHolder.INSTANCE.host != null) {
+        return SingletonHolder.INSTANCE.host;
       }
-    }, 0);
+      SpanReceiverHost host = new SpanReceiverHost();
+      host.loadSpanReceivers(conf);
+      SingletonHolder.INSTANCE.host = host;
+      ShutdownHookManager.get().addShutdownHook(new Runnable() {
+          public void run() {
+            SingletonHolder.INSTANCE.host.closeReceivers();
+          }
+        }, 0);
+      return SingletonHolder.INSTANCE.host;
+    }
   }
 
   /**
@@ -79,7 +87,6 @@ public class SpanReceiverHost {
     }
     for (String className : receiverNames) {
       className = className.trim();
-
       try {
         implClass = Class.forName(className);
         receivers.add(loadInstance(implClass, conf));
@@ -132,7 +139,9 @@ public class SpanReceiverHost {
   /**
    * Calls close() on all SpanReceivers created by this SpanReceiverHost.
    */
-  public void closeReceivers() {
+  public synchronized void closeReceivers() {
+    if (closed) return;
+    closed = true;
     for (SpanReceiver rcvr : receivers) {
       try {
         rcvr.close();

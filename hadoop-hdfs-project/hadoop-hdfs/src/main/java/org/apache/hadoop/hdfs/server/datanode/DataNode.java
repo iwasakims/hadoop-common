@@ -326,6 +326,8 @@ public class DataNode extends Configured
   private boolean isPermissionEnabled;
   private String dnUserName = null;
 
+  private SpanReceiverHost spanReceiverHost;
+
   /**
    * Create the DataNode given a configuration, an array of dataDirs,
    * and a namenode proxy
@@ -823,6 +825,7 @@ public class DataNode extends Configured
     this.dataDirs = dataDirs;
     this.conf = conf;
     this.dnConf = new DNConf(conf);
+    this.spanReceiverHost = SpanReceiverHost.getInstance(conf);
 
     if (dnConf.maxLockedMemory > 0) {
       if (!NativeIO.POSIX.getCacheManipulator().verifyCanMlock()) {
@@ -1504,6 +1507,9 @@ public class DataNode extends Configured
       MBeans.unregister(dataNodeInfoBeanName);
       dataNodeInfoBeanName = null;
     }
+    if (this.spanReceiverHost != null) {
+      this.spanReceiverHost.closeReceivers();
+    }
     if (shortCircuitRegistry != null) shortCircuitRegistry.shutdown();
     LOG.info("Shutdown complete.");
     synchronized(this) {
@@ -2047,7 +2053,6 @@ public class DataNode extends Configured
     List<StorageLocation> locations =
         checkStorageLocations(dataDirs, localFS, dataNodeDiskChecker);
     DefaultMetricsSystem.initialize("DataNode");
-    SpanReceiverHost.init(conf);
 
     assert locations.size() > 0 : "number of data directories should be > 0";
     return new DataNode(conf, locations, resources);

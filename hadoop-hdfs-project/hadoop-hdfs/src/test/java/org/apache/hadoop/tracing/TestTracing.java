@@ -56,7 +56,7 @@ public class TestTracing {
     Configuration conf = new Configuration();
     conf.set(SpanReceiverHost.SPAN_RECEIVERS_CONF_KEY,
         SetSpanReceiver.class.getName());
-    SpanReceiverHost.init(conf);
+    SpanReceiverHost spanReceiverHost = SpanReceiverHost.getInstance(conf);
   }
 
   @Test

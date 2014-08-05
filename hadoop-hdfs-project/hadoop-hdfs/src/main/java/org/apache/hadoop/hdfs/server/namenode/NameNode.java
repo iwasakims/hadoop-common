@@ -279,6 +279,7 @@ public class NameNode implements NameNodeStatusMXBean {
 
   private JvmPauseMonitor pauseMonitor;
   private ObjectName nameNodeStatusBeanName;
+  private SpanReceiverHost spanReceiverHost;
   /**
    * The namenode address that clients will use to access this namenode
    * or the name service. For HA configurations using logical URI, it
@@ -588,7 +589,7 @@ public class NameNode implements NameNodeStatusMXBean {
       startHttpServer(conf);
     }
 
-    SpanReceiverHost.init(conf);
+    this.spanReceiverHost = SpanReceiverHost.getInstance(conf);
 
     loadNamesystem(conf);
 
@@ -825,6 +826,9 @@ public class NameNode implements NameNodeStatusMXBean {
       if (nameNodeStatusBeanName != null) {
         MBeans.unregister(nameNodeStatusBeanName);
         nameNodeStatusBeanName = null;
+      }
+      if (this.spanReceiverHost != null) {
+        this.spanReceiverHost.closeReceivers();
       }
     }
   }
