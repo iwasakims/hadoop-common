@@ -525,7 +525,7 @@ public abstract class Server {
     }
 
     public Call(int id, int retryCount, Writable param, Connection connection,
-                RPC.RpcKind kind, byte[] clientId, Span span) {
+        RPC.RpcKind kind, byte[] clientId, Span span) {
       this.callId = id;
       this.retryCount = retryCount;
       this.rpcRequest = param;
@@ -1947,8 +1947,8 @@ public abstract class Server {
       }
 
       Call call = new Call(header.getCallId(), header.getRetryCount(),
-          rpcRequest, this, ProtoUtil.convert(header.getRpcKind()), header
-          .getClientId().toByteArray(), traceSpan);
+          rpcRequest, this, ProtoUtil.convert(header.getRpcKind()),
+          header.getClientId().toByteArray(), traceSpan);
 
       callQueue.put(call);              // queue the call; maybe blocked here
       incRpcCount();  // Increment the rpc count

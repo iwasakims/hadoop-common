@@ -168,6 +168,7 @@ public class Sender implements DataTransferProtocol {
       
       if (source != null) {
         proto.setSource(PBHelper.convertDatanodeInfo(source));
+      }
       send(out, Op.WRITE_BLOCK, proto.build());
     } finally {
       if (ts != null) ts.close();

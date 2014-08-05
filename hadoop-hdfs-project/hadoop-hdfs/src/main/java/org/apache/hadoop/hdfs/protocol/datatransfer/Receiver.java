@@ -140,21 +140,22 @@ public abstract class Receiver implements DataTransferProtocol {
     if (ti != null) {
       ts = Trace.startSpan("Receiver.opWriteBlock", ti);
     }
-    writeBlock(PBHelper.convert(proto.getHeader().getBaseHeader().getBlock()),
-        PBHelper.convertStorageType(proto.getStorageType()),
-        PBHelper.convert(proto.getHeader().getBaseHeader().getToken()),
-        proto.getHeader().getClientName(),
-        targets,
-        PBHelper.convertStorageTypes(proto.getTargetStorageTypesList(), targets.length),
-        PBHelper.convert(proto.getSource()),
-        fromProto(proto.getStage()),
-        proto.getPipelineSize(),
-        proto.getMinBytesRcvd(), proto.getMaxBytesRcvd(),
-        proto.getLatestGenerationStamp(),
-        fromProto(proto.getRequestedChecksum()),
-        (proto.hasCachingStrategy() ?
-            getCachingStrategy(proto.getCachingStrategy()) :
-          CachingStrategy.newDefaultStrategy()));
+    try {
+      writeBlock(PBHelper.convert(proto.getHeader().getBaseHeader().getBlock()),
+          PBHelper.convertStorageType(proto.getStorageType()),
+          PBHelper.convert(proto.getHeader().getBaseHeader().getToken()),
+          proto.getHeader().getClientName(),
+          targets,
+          PBHelper.convertStorageTypes(proto.getTargetStorageTypesList(), targets.length),
+          PBHelper.convert(proto.getSource()),
+          fromProto(proto.getStage()),
+          proto.getPipelineSize(),
+          proto.getMinBytesRcvd(), proto.getMaxBytesRcvd(),
+          proto.getLatestGenerationStamp(),
+          fromProto(proto.getRequestedChecksum()),
+          (proto.hasCachingStrategy() ?
+              getCachingStrategy(proto.getCachingStrategy()) :
+            CachingStrategy.newDefaultStrategy()));
      } finally {
        if (ts != null) ts.close();
      }
