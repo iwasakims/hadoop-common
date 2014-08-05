@@ -99,8 +99,8 @@ public class TestTracing {
     Assert.assertNotNull(s);
     long spanStart = s.getStartTimeMillis();
     long spanEnd = s.getStopTimeMillis();
-    Assert.assertTrue(spanStart - startTime < 50);
-    Assert.assertTrue(spanEnd - endTime < 50);
+    Assert.assertTrue(spanStart - startTime < 100);
+    Assert.assertTrue(spanEnd - endTime < 100);
 
     // There should only be one trace id as it should all be homed in the
     // top trace.
@@ -147,7 +147,6 @@ public class TestTracing {
         count += 1;
         buf.clear();
         istream.seek(istream.getPos() + 5);
-
       }
     } catch (IOException ioe) {
       // Ignore this it's probably a seek after eof.
@@ -175,8 +174,8 @@ public class TestTracing {
 
     long spanStart = s.getStartTimeMillis();
     long spanEnd = s.getStopTimeMillis();
-    Assert.assertTrue(spanStart - startTime < 50);
-    Assert.assertTrue(spanEnd - endTime < 50);
+    Assert.assertTrue(spanStart - startTime < 100);
+    Assert.assertTrue(spanEnd - endTime < 100);
 
     Assert.assertTrue(SetSpanReceiver.SetHolder.size() > 10);
 
