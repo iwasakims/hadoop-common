@@ -100,9 +100,6 @@
       <item name="Encrypted Shuffle" href="hadoop-mapreduce-client/hadoop-mapreduce-client-core/EncryptedShuffle.html"/>
       <item name="Pluggable Shuffle/Sort" href="hadoop-mapreduce-client/hadoop-mapreduce-client-core/PluggableShuffleAndPluggableSort.html"/>
       <item name="Distributed Cache Deploy" href="hadoop-mapreduce-client/hadoop-mapreduce-client-core/DistributedCacheDeploy.html"/>
-      <item name="Hadoop Streaming" href="hadoop-mapreduce-client/hadoop-mapreduce-client-core/HadoopStreaming.html"/>
-      <item name="Hadoop Archives" href="hadoop-mapreduce-client/hadoop-mapreduce-client-core/HadoopArchives.html"/>
-      <item name="DistCp" href="hadoop-mapreduce-client/hadoop-mapreduce-client-core/DistCp.html"/>
     </menu>
 
     <menu name="MapReduce REST APIs" inherit="top">
@@ -120,7 +117,6 @@
       <item name="YARN Timeline Server" href="hadoop-yarn/hadoop-yarn-site/TimelineServer.html"/>
       <item name="Writing YARN Applications" href="hadoop-yarn/hadoop-yarn-site/WritingYarnApplications.html"/>
       <item name="YARN Commands" href="hadoop-yarn/hadoop-yarn-site/YarnCommands.html"/>
-      <item name="Scheduler Load Simulator" href="hadoop-sls/SchedulerLoadSimulator.html"/>
     </menu>
 
     <menu name="YARN REST APIs" inherit="top">
@@ -128,14 +124,21 @@
       <item name="Resource Manager" href="hadoop-yarn/hadoop-yarn-site/ResourceManagerRest.html"/>
       <item name="Node Manager" href="hadoop-yarn/hadoop-yarn-site/NodeManagerRest.html"/>
     </menu>
-    
+
     <menu name="Auth" inherit="top">
       <item name="Overview" href="hadoop-auth/index.html"/>
       <item name="Examples" href="hadoop-auth/Examples.html"/>
       <item name="Configuration" href="hadoop-auth/Configuration.html"/>
       <item name="Building" href="hadoop-auth/BuildingIt.html"/>
     </menu>
-    
+
+    <menu name="Tools" inherit="top">
+      <item name="Hadoop Streaming" href="hadoop-streaming/HadoopStreaming.html"/>
+      <item name="Hadoop Archives" href="hadoop-archives/HadoopArchives.html"/>
+      <item name="DistCp" href="hadoop-distcp/DistCp.html"/>
+      <item name="Scheduler Load Simulator" href="hadoop-sls/SchedulerLoadSimulator.html"/>
+    </menu>
+
     <menu name="Reference" inherit="top">
       <item name="Release Notes" href="hadoop-project-dist/hadoop-common/releasenotes.html"/>
       <item name="API docs" href="api/index.html"/>
