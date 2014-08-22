@@ -205,7 +205,7 @@ public class ProtobufRpcEngine implements RpcEngine {
       }
 
       RequestHeaderProto rpcRequestHeader = constructRpcRequestHeader(method);
-      
+
       if (LOG.isTraceEnabled()) {
         LOG.trace(Thread.currentThread().getId() + ": Call -> " +
             remoteId + ": " + method.getName() +

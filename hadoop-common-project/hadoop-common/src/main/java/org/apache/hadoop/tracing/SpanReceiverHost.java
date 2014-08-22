@@ -73,7 +73,7 @@ public class SpanReceiverHost {
    * Reads the names of classes specified in the
    * "hadoop.trace.spanreceiver.classes" property and instantiates and registers
    * them with the Tracer as SpanReceiver's.
-   * 
+   *
    * The nullary constructor is called during construction, but if the classes
    * specified implement the Configurable interface, setConfiguration() will be
    * called on them. This allows SpanReceivers to use values from the Hadoop

@@ -274,7 +274,7 @@ public class NameNode implements NameNodeStatusMXBean {
   protected NamenodeRegistration nodeRegistration;
   /** Activated plug-ins. */
   private List<ServicePlugin> plugins;
-  
+
   private NameNodeRpcServer rpcServer;
 
   private JvmPauseMonitor pauseMonitor;
@@ -595,7 +595,7 @@ public class NameNode implements NameNodeStatusMXBean {
 
     rpcServer = createRpcServer(conf);
     if (clientNamenodeAddress == null) {
-      // This is expected for MiniDFSCluster. Set it now using 
+      // This is expected for MiniDFSCluster. Set it now using
       // the RPC server's bind address.
       clientNamenodeAddress = 
           NetUtils.getHostPortString(rpcServer.getRpcAddress());

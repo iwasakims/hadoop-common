@@ -47,7 +47,7 @@ package hadoop.common;
  */
 enum RpcKindProto {
   RPC_BUILTIN          = 0;  // Used for built in calls by tests
-  RPC_WRITABLE         = 1;  // Use WritableRpcEngine 
+  RPC_WRITABLE         = 1;  // Use WritableRpcEngine
   RPC_PROTOCOL_BUFFER  = 2;  // Use ProtobufRpcEngine
 }
 
@@ -63,7 +63,7 @@ message RPCTInfo {
   optional int64 traceId = 1;
   optional int64 parentId = 2;
 }
-   
+
 message RpcRequestHeaderProto { // the header for the RpcRequest
   enum OperationProto {
     RPC_FINAL_PACKET        = 0; // The final RPC Packet

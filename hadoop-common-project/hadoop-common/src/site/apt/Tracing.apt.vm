@@ -25,7 +25,7 @@ Enabling Dapper-like Tracing in HDFS
 ** HTrace
 
   {{{https://issues.apache.org/jira/browse/HDFS-5274}HDFS-5274}}
-  added support for tracing requests through HDFS, 
+  added support for tracing requests through HDFS,
   using the open source tracing library, {{{https://github.com/cloudera/htrace}HTrace}}.
   Setting up tracing is quite simple, however it requires some very minor changes to your client code.
 
@@ -33,7 +33,7 @@ Enabling Dapper-like Tracing in HDFS
 
   The tracing system works by collecting information in structs called 'Spans'.
   It is up to you to choose how you want to receive this information
-  by implementing the SpanReceiver interface, which defines one method: 
+  by implementing the SpanReceiver interface, which defines one method:
 
 +----
 public void receiveSpan(Span span);
@@ -67,7 +67,7 @@ public void receiveSpan(Span span);
 
   you also need to add the jar of <<<htrace-zipkin>>> to the classpath of Hadoop on each node.
   Here is example setup procedure.
- 
+
 +----
   $ git clone https://github.com/cloudera/htrace
   $ cd htrace/htrace-zipkin
@@ -84,15 +84,15 @@ public void receiveSpan(Span span);
   <property>
     <name>hadoop.trace.spanreceiver.classes</name>
     <value>org.htrace.impl.ZipkinSpanReceiver</value>
-  </property> 
+  </property>
   <property>
     <name>hadoop.zipkin.collector-hostname</name>
     <value>192.168.1.2</value>
-  </property> 
+  </property>
   <property>
     <name>hadoop.zipkin.collector-port</name>
     <value>9410</value>
-  </property> 
+  </property>
 +----
 
 ** Turning on tracing by HTrace API

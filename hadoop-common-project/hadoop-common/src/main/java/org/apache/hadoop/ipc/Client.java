@@ -756,12 +756,12 @@ public class Client {
             outStream = new BufferedOutputStream(outStream);
           }
           this.out = new DataOutputStream(outStream);
-          
+
           writeConnectionContext(remoteId, authMethod);
 
           // update last activity time
           touch();
-          
+
           if (Trace.isTracing()) {
             Trace.addTimelineAnnotation("IPC client connected");
           }
