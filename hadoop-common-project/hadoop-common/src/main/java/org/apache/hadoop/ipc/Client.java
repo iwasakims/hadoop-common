@@ -88,6 +88,7 @@ import org.apache.hadoop.util.ProtoUtil;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
+import org.htrace.Trace;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -689,10 +690,13 @@ public class Client {
     private synchronized void setupIOstreams() {
       if (socket != null || shouldCloseConnection.get()) {
         return;
-      } 
+      }
       try {
         if (LOG.isDebugEnabled()) {
           LOG.debug("Connecting to "+server);
+        }
+        if (Trace.isTracing()) {
+          Trace.addTimelineAnnotation("IPC client was not connected. Connecting...");
         }
         short numRetries = 0;
         Random rand = null;
@@ -757,6 +761,10 @@ public class Client {
 
           // update last activity time
           touch();
+          
+          if (Trace.isTracing()) {
+            Trace.addTimelineAnnotation("IPC client connected");
+          }
 
           // start the receiver thread after the socket connection has been set
           // up

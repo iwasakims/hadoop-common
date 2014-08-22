@@ -79,6 +79,7 @@ import org.apache.hadoop.conf.Configuration.IntegerRanges;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.io.DataOutputBuffer;
+import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.ipc.ProtobufRpcEngine.RpcResponseMessageWrapper;
@@ -115,6 +116,10 @@ import org.apache.hadoop.util.ProtoUtil;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
+import org.htrace.Span;
+import org.htrace.Trace;
+import org.htrace.TraceInfo;
+import org.htrace.TraceScope;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.ByteString;
@@ -280,7 +285,7 @@ public abstract class Server {
    * after the call returns.
    */
   private static final ThreadLocal<Call> CurCall = new ThreadLocal<Call>();
-  
+
   /** Get the current call */
   @VisibleForTesting
   public static ThreadLocal<Call> getCurCall() {
@@ -506,6 +511,7 @@ public abstract class Server {
     private ByteBuffer rpcResponse;       // the response for this call
     private final RPC.RpcKind rpcKind;
     private final byte[] clientId;
+    private final Span traceSpan; // the tracing span on the server side
 
     public Call(int id, int retryCount, Writable param, 
         Connection connection) {
@@ -515,6 +521,11 @@ public abstract class Server {
 
     public Call(int id, int retryCount, Writable param, Connection connection,
         RPC.RpcKind kind, byte[] clientId) {
+      this(id, retryCount, param, connection, kind, clientId, null);
+    }
+
+    public Call(int id, int retryCount, Writable param, Connection connection,
+        RPC.RpcKind kind, byte[] clientId, Span span) {
       this.callId = id;
       this.retryCount = retryCount;
       this.rpcRequest = param;
@@ -523,6 +534,7 @@ public abstract class Server {
       this.rpcResponse = null;
       this.rpcKind = kind;
       this.clientId = clientId;
+      this.traceSpan = span;
     }
     
     @Override
@@ -1920,10 +1932,24 @@ public abstract class Server {
         throw new WrappedRpcServerException(
             RpcErrorCodeProto.FATAL_DESERIALIZING_REQUEST, err);
       }
-        
+
+      Span traceSpan = null;
+
+      if (header.hasTraceInfo() &&
+          (header.getTraceInfo() != null) && 
+          header.getTraceInfo().hasTraceId()) {
+        String traceDescription = rpcRequest.toString();
+
+        // If the incoming RPC included tracing info, always continue the trace
+        TraceInfo parentSpan = new TraceInfo(header.getTraceInfo().getTraceId(),
+                                             header.getTraceInfo().getParentId());
+        traceSpan = Trace.startSpan(traceDescription, parentSpan).detach();
+      }
+
       Call call = new Call(header.getCallId(), header.getRetryCount(),
-          rpcRequest, this, ProtoUtil.convert(header.getRpcKind()), header
-              .getClientId().toByteArray());
+          rpcRequest, this, ProtoUtil.convert(header.getRpcKind()),
+          header.getClientId().toByteArray(), traceSpan);
+
       callQueue.put(call);              // queue the call; maybe blocked here
       incRpcCount();  // Increment the rpc count
     }
@@ -2067,6 +2093,7 @@ public abstract class Server {
       ByteArrayOutputStream buf = 
         new ByteArrayOutputStream(INITIAL_RESP_BUF_SIZE);
       while (running) {
+        TraceScope traceScope = null;
         try {
           final Call call = callQueue.take(); // pop the queue; maybe blocked here
           if (LOG.isDebugEnabled()) {
@@ -2083,12 +2110,16 @@ public abstract class Server {
           Writable value = null;
 
           CurCall.set(call);
+          if (call.traceSpan != null) {
+            traceScope = Trace.continueSpan(call.traceSpan);
+          }
+          
           try {
             // Make the call as the user via Subject.doAs, thus associating
             // the call with the Subject
             if (call.connection.user == null) {
-              value = call(call.rpcKind, call.connection.protocolName, call.rpcRequest, 
-                           call.timestamp);
+              value = call(call.rpcKind, call.connection.protocolName,
+                           call.rpcRequest, call.timestamp);
             } else {
               value = 
                 call.connection.user.doAs
@@ -2136,14 +2167,15 @@ public abstract class Server {
             }
           }
           CurCall.set(null);
+
           synchronized (call.connection.responseQueue) {
             // setupResponse() needs to be sync'ed together with 
             // responder.doResponse() since setupResponse may use
             // SASL to encrypt response data and SASL enforces
             // its own message ordering.
-            setupResponse(buf, call, returnStatus, detailedErr, 
+            setupResponse(buf, call, returnStatus, detailedErr,
                 value, errorClass, error);
-            
+
             // Discard the large buf and reset it back to smaller size 
             // to free up heap
             if (buf.size() > maxRespSize) {
@@ -2159,6 +2191,15 @@ public abstract class Server {
           }
         } catch (Exception e) {
           LOG.info(Thread.currentThread().getName() + " caught an exception", e);
+          if (Trace.isTracing()) {
+            traceScope.getSpan().addTimelineAnnotation("Exception: " +
+                StringUtils.stringifyException(e));
+          }
+        } finally {
+          if (traceScope != null) {
+            traceScope.close();
+          }
+          IOUtils.cleanup(LOG, traceScope);
         }
       }
       LOG.debug(Thread.currentThread().getName() + ": exiting");
