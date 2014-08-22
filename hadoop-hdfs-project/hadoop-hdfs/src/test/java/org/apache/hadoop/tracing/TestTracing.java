@@ -75,27 +75,19 @@ public class TestTracing {
     long endTime = System.currentTimeMillis();
     ts.close();
 
-    // There should be ~80 but leave some room so that this doesn't
-    // have to be edited if anything is changed.
-    // 0 is expected if tracing is off so 20 is a good indicator
-    // that tracing is working.
-    Assert.assertTrue(SetSpanReceiver.SetHolder.size() >= 20);
-
     String[] expectedSpanNames = {
-        "testWriteTraceHooks",
-        "DFSOutputStream",
-        "DFSOutputStream.createBlockOutputStream",
-        "DFSOutputStream.close",
-        "Sender.writeBlock",
-        "Receiver.opWriteBlock",
-        "PacketResponder"
+      "testWriteTraceHooks",
+      "org.apache.hadoop.hdfs.protocol.ClientProtocol.create",
+      "org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.ClientNamenodeProtocol.BlockingInterface.create",
+      "org.apache.hadoop.hdfs.protocol.ClientProtocol.fsync",
+      "org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.ClientNamenodeProtocol.BlockingInterface.fsync",
+      "org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.ClientNamenodeProtocol.BlockingInterface.complete"
     };
-
     assertSpanNamesFound(expectedSpanNames);
 
     // The trace should last about the same amount of time as the test
     Map<String, List<Span>> map = SetSpanReceiver.SetHolder.getMap();
-    Span s = map.get("DFSOutputStream").get(0);
+    Span s = map.get("testWriteTraceHooks").get(0);
     Assert.assertNotNull(s);
     long spanStart = s.getStartTimeMillis();
     long spanEnd = s.getStopTimeMillis();
@@ -158,26 +150,21 @@ public class TestTracing {
     ts.close();
 
     String[] expectedSpanNames = {
-        "testReadTraceHooks",
-        "DFSInputStream",
-        "DFSInputStream.close",
-        "Sender.readBlock",
-        "Receiver.opReadBlock",
+      "testReadTraceHooks",
+      "org.apache.hadoop.hdfs.protocol.ClientProtocol.getBlockLocations",
+      "org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.ClientNamenodeProtocol.BlockingInterface.getBlockLocations"
     };
-    
     assertSpanNamesFound(expectedSpanNames);
 
     // The trace should last about the same amount of time as the test
     Map<String, List<Span>> map = SetSpanReceiver.SetHolder.getMap();
-    Span s = map.get("DFSInputStream").get(0);
+    Span s = map.get("testReadTraceHooks").get(0);
     Assert.assertNotNull(s);
 
     long spanStart = s.getStartTimeMillis();
     long spanEnd = s.getStopTimeMillis();
     Assert.assertTrue(spanStart - startTime < 100);
     Assert.assertTrue(spanEnd - endTime < 100);
-
-    Assert.assertTrue(SetSpanReceiver.SetHolder.size() > 10);
 
     // There should only be one trace id as it should all be homed in the
     // top trace.
@@ -208,7 +195,6 @@ public class TestTracing {
         count += 1;
         buf.clear();
         istream.seek(istream.getPos() + 5);
-
       }
     } catch (IOException ioe) {
       // Ignore this it's probably a seek after eof.
