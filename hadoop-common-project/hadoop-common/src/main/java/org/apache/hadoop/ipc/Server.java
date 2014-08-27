@@ -1932,7 +1932,7 @@ public abstract class Server {
         throw new WrappedRpcServerException(
             RpcErrorCodeProto.FATAL_DESERIALIZING_REQUEST, err);
       }
-      
+        
       Span traceSpan = null;
       if (header.hasTraceInfo()) {
         // If the incoming RPC included tracing info, always continue the trace
