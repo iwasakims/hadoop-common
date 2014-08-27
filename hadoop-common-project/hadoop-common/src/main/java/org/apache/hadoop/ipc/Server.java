@@ -280,12 +280,12 @@ public abstract class Server {
   public static Server get() {
     return SERVER.get();
   }
-
+ 
   /** This is set to Call object before Handler invokes an RPC and reset
    * after the call returns.
    */
   private static final ThreadLocal<Call> CurCall = new ThreadLocal<Call>();
-
+  
   /** Get the current call */
   @VisibleForTesting
   public static ThreadLocal<Call> getCurCall() {
@@ -513,7 +513,7 @@ public abstract class Server {
     private final byte[] clientId;
     private final Span traceSpan; // the tracing span on the server side
 
-    public Call(int id, int retryCount, Writable param,
+    public Call(int id, int retryCount, Writable param, 
         Connection connection) {
       this(id, retryCount, param, connection, RPC.RpcKind.RPC_BUILTIN,
           RpcConstants.DUMMY_CLIENT_ID);
@@ -536,7 +536,7 @@ public abstract class Server {
       this.clientId = clientId;
       this.traceSpan = span;
     }
-
+    
     @Override
     public String toString() {
       return rpcRequest + " from " + connection + " Call#" + callId + " Retry#"
@@ -1932,7 +1932,7 @@ public abstract class Server {
         throw new WrappedRpcServerException(
             RpcErrorCodeProto.FATAL_DESERIALIZING_REQUEST, err);
       }
-
+      
       Span traceSpan = null;
 
       if (header.hasTraceInfo() &&
@@ -2090,7 +2090,7 @@ public abstract class Server {
     public void run() {
       LOG.debug(Thread.currentThread().getName() + ": starting");
       SERVER.set(Server.this);
-      ByteArrayOutputStream buf =
+      ByteArrayOutputStream buf = 
         new ByteArrayOutputStream(INITIAL_RESP_BUF_SIZE);
       while (running) {
         TraceScope traceScope = null;
@@ -2118,10 +2118,10 @@ public abstract class Server {
             // Make the call as the user via Subject.doAs, thus associating
             // the call with the Subject
             if (call.connection.user == null) {
-              value = call(call.rpcKind, call.connection.protocolName,
-                           call.rpcRequest, call.timestamp);
+              value = call(call.rpcKind, call.connection.protocolName, call.rpcRequest, 
+                           call.timestamp);
             } else {
-              value =
+              value = 
                 call.connection.user.doAs
                   (new PrivilegedExceptionAction<Writable>() {
                      @Override
@@ -2168,14 +2168,14 @@ public abstract class Server {
           }
           CurCall.set(null);
           synchronized (call.connection.responseQueue) {
-            // setupResponse() needs to be sync'ed together with
+            // setupResponse() needs to be sync'ed together with 
             // responder.doResponse() since setupResponse may use
             // SASL to encrypt response data and SASL enforces
             // its own message ordering.
-            setupResponse(buf, call, returnStatus, detailedErr,
+            setupResponse(buf, call, returnStatus, detailedErr, 
                 value, errorClass, error);
-
-            // Discard the large buf and reset it back to smaller size
+            
+            // Discard the large buf and reset it back to smaller size 
             // to free up heap
             if (buf.size() > maxRespSize) {
               LOG.warn("Large response size " + buf.size() + " for call "

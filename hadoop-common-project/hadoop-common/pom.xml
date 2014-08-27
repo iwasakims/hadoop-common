@@ -223,6 +223,7 @@
       <artifactId>jsr305</artifactId>
       <scope>compile</scope>
     </dependency>
+
     <dependency>
       <groupId>org.htrace</groupId>
       <artifactId>htrace-core</artifactId>

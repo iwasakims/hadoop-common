@@ -690,7 +690,7 @@ public class Client {
     private synchronized void setupIOstreams() {
       if (socket != null || shouldCloseConnection.get()) {
         return;
-      }
+      } 
       try {
         if (LOG.isDebugEnabled()) {
           LOG.debug("Connecting to "+server);
@@ -756,7 +756,7 @@ public class Client {
             outStream = new BufferedOutputStream(outStream);
           }
           this.out = new DataOutputStream(outStream);
-
+          
           writeConnectionContext(remoteId, authMethod);
 
           // update last activity time

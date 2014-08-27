@@ -183,7 +183,7 @@ public class ProtobufRpcEngine implements RpcEngine {
       if (LOG.isDebugEnabled()) {
         startTime = Time.now();
       }
-
+      
       if (args.length != 2) { // RpcController + Message
         throw new ServiceException("Too many parameters for request. Method: ["
             + method.getName() + "]" + ", Expected: 2, Actual: "
@@ -205,7 +205,7 @@ public class ProtobufRpcEngine implements RpcEngine {
       }
 
       RequestHeaderProto rpcRequestHeader = constructRpcRequestHeader(method);
-
+      
       if (LOG.isTraceEnabled()) {
         LOG.trace(Thread.currentThread().getId() + ": Call -> " +
             remoteId + ": " + method.getName() +
