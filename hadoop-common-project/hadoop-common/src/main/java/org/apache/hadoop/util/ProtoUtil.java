@@ -171,7 +171,7 @@ public abstract class ProtoUtil {
     // Add tracing info if we are currently tracing.
     if (Trace.isTracing()) {
       Span s = Trace.currentSpan();
-      result.setTraceInfo(RPCTInfo.newBuilder()
+      result.setTraceInfo(RPCTraceInfoProto.newBuilder()
           .setParentId(s.getSpanId())
           .setTraceId(s.getTraceId()).build());
     }

@@ -1934,16 +1934,11 @@ public abstract class Server {
       }
       
       Span traceSpan = null;
-
-      if (header.hasTraceInfo() &&
-          (header.getTraceInfo() != null) &&
-          header.getTraceInfo().hasTraceId()) {
-        String traceDescription = rpcRequest.toString();
-
+      if (header.hasTraceInfo()) {
         // If the incoming RPC included tracing info, always continue the trace
         TraceInfo parentSpan = new TraceInfo(header.getTraceInfo().getTraceId(),
                                              header.getTraceInfo().getParentId());
-        traceSpan = Trace.startSpan(traceDescription, parentSpan).detach();
+        traceSpan = Trace.startSpan(rpcRequest.toString(), parentSpan).detach();
       }
 
       Call call = new Call(header.getCallId(), header.getRetryCount(),
@@ -2187,6 +2182,10 @@ public abstract class Server {
         } catch (InterruptedException e) {
           if (running) {                          // unexpected -- log it
             LOG.info(Thread.currentThread().getName() + " unexpectedly interrupted", e);
+            if (Trace.isTracing()) {
+              traceScope.getSpan().addTimelineAnnotation("unexpectedly interrupted: " +
+                  StringUtils.stringifyException(e));
+            }
           }
         } catch (Exception e) {
           LOG.info(Thread.currentThread().getName() + " caught an exception", e);

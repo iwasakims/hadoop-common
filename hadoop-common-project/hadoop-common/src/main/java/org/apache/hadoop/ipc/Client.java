@@ -696,7 +696,7 @@ public class Client {
           LOG.debug("Connecting to "+server);
         }
         if (Trace.isTracing()) {
-          Trace.addTimelineAnnotation("IPC client was not connected. Connecting...");
+          Trace.addTimelineAnnotation("IPC client connecting to " + server);
         }
         short numRetries = 0;
         Random rand = null;
@@ -763,7 +763,7 @@ public class Client {
           touch();
 
           if (Trace.isTracing()) {
-            Trace.addTimelineAnnotation("IPC client connected");
+            Trace.addTimelineAnnotation("IPC client connected to " + server);
           }
 
           // start the receiver thread after the socket connection has been set
