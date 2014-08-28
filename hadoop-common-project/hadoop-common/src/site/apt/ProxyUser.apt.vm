@@ -11,19 +11,19 @@
 ~~ limitations under the License. See accompanying LICENSE file.
 
   ---
-  Superusers Acting On Behalf Of Other Users
+  Proxy user - Superusers Acting On Behalf Of Other Users
   ---
   ---
   ${maven.build.timestamp}
 
-Superusers Acting On Behalf Of Other Users
+Proxy user - Superusers Acting On Behalf Of Other Users
 
 %{toc|section=1|fromDepth=0}
 
 * Introduction
 
    This document describes how a superuser can submit jobs or access hdfs
-   on behalf of another user in a secured way.
+   on behalf of another user.
 
 * Use Case
 
@@ -32,15 +32,18 @@ Superusers Acting On Behalf Of Other Users
 
    A superuser with username 'super' wants to submit job and access hdfs
    on behalf of a user joe. The superuser has kerberos credentials but
-   user joe doesn't have any. The tasks are required to run as user joe
+   user joe doesn't have any. The jobs are required to run as user joe
    and any file accesses on namenode are required to be done as user joe.
    It is required that user joe can connect to the namenode or job tracker
    on a connection authenticated with super's kerberos credentials. In
    other words super is impersonating the user joe.
 
+   Some products such as Apache Oozie need this.
+
+
 * Code example
 
-   In this example super's kerberos credentials are used for login and a
+   In this example super's credentials are used for login and a
    proxy user ugi object is created for joe. The operations are performed
    within the doAs method of this proxy user ugi object.
 
@@ -63,7 +66,7 @@ Superusers Acting On Behalf Of Other Users
 
 * Configurations
 
-   The superuser must be configured on namenode and jobtracker to be
+   The proxy user must be configured on namenode and jobtracker to be
    allowed to impersonate another user. Following configurations are
    required.
 
@@ -86,10 +89,27 @@ Superusers Acting On Behalf Of Other Users
    If more lax security is preferred, the wildcard value * may be used to
    allow impersonation from any host or of any user.
 
+   The <<<hadoop.proxyuser.${superuser}.hosts>>> accepts list of ip addresses,
+   ip address ranges in CIDR format and/or host names.
+   For example, by specifying as below,
+   user named <<<super>>> accessing from hosts in the range 
+   <<<10.222.0.0-15>>> and <<<10.113.221.221>>> can impersonate.
+      
+----
+   <property>
+     <name>hadoop.proxyuser.super.hosts</name>
+     <value>10.222.0.0/16,10.113.221.221</value>
+   </property>
+----
+
+
 * Caveats
 
-   The superuser must have kerberos credentials to be able to impersonate
-   another user. It cannot use delegation tokens for this feature. It
+   If the cluster is running in {{{./SecureMode.html}Secure Mode}},
+   the superuser must have kerberos credentials to be able to impersonate
+   another user.
+
+   It cannot use delegation tokens for this feature. It
    would be wrong if superuser adds its own delegation token to the proxy
    user ugi, as it will allow the proxy user to connect to the service
    with the privileges of the superuser.
